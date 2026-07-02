@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local configuration and secrets
+.env
+*.pem
+*firebase-adminsdk*.json
+smart-logistics-system-*.json
+
+# Local logs and IDE settings
+*.log
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

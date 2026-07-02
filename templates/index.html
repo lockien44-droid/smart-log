@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Logistics Real-Time Dashboard</title>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<style>
+body{
+    font-family:Arial,sans-serif;
+    background:#0f172a;
+    color:white;
+    padding:20px;
+    margin:0;
+}
+
+h1{
+    color:#38bdf8;
+    text-align:center;
+    margin-bottom:25px;
+}
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:15px;
+    margin-bottom:25px;
+}
+
+.card{
+    background:#1e293b;
+    padding:20px;
+    border-radius:12px;
+    text-align:center;
+}
+
+.card h2{
+    margin:0;
+    color:#38bdf8;
+}
+
+.status-bar{
+    text-align:center;
+    margin-bottom:20px;
+    font-weight:bold;
+}
+
+#orders{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+    gap:15px;
+}
+
+.order-card{
+    background:#1e293b;
+    padding:15px;
+    border-radius:12px;
+    border-left:6px solid #22c55e;
+}
+
+.low{
+    border-left-color:#ef4444;
+}
+
+.warning{
+    border-left-color:#f59e0b;
+}
+
+.ok{
+    border-left-color:#22c55e;
+}
+
+.pending{
+    color:#f97316;
+}
+
+.processing{
+    color:#3b82f6;
+}
+
+.shipping{
+    color:#eab308;
+}
+
+.delivered{
+    color:#22c55e;
+}
+
+.cancelled{
+    color:#ef4444;
+}
+
+small{
+    color:#94a3b8;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🚚 Smart Logistics Real-Time Dashboard</h1>
+
+<div class="status-bar" id="connectionStatus">
+🟡 Connecting...
+</div>
+
+<div class="stats">
+
+    <div class="card">
+        <h2 id="totalOrders">0</h2>
+        <p>Total Orders</p>
+    </div>
+
+    <div class="card">
+        <h2 id="deliveredOrders">0</h2>
+        <p>Delivered</p>
+    </div>
+
+    <div class="card">
+        <h2 id="cancelledOrders">0</h2>
+        <p>Cancelled</p>
+    </div>
+
+    <div class="card">
+        <h2 id="lowStock">0</h2>
+        <p>Low Stock Alerts</p>
+    </div>
+
+    <div class="card">
+        <h2 id="totalInventory">0</h2>
+        <p>Total Inventory</p>
+    </div>
+
+    <div class="card">
+        <h2 id="totalDemand">0</h2>
+        <p>Total Demand</p>
+    </div>
+
+</div>
+
+<div id="orders"></div>
+
+<script>
+
+const socket = io("http://127.0.0.1:8000",{
+    transports:["websocket","polling"],
+    reconnection:true,
+    reconnectionAttempts:Infinity,
+    reconnectionDelay:1000
+});
+
+const orders = {};
+
+// ====================
+// SOCKET EVENTS
+// ====================
+
+socket.on("connect",()=>{
+
+    console.log("Connected:",socket.id);
+
+    document.getElementById(
+        "connectionStatus"
+    ).innerHTML =
+    "<span style='color:#22c55e'>🟢 Connected</span>";
+});
+
+socket.on("disconnect",()=>{
+
+    console.log("Disconnected");
+
+    document.getElementById(
+        "connectionStatus"
+    ).innerHTML =
+    "<span style='color:#ef4444'>🔴 Disconnected</span>";
+});
+
+socket.on("connect_error",(err)=>{
+
+    console.error(
+        "Connection Error:",
+        err.message
+    );
+
+    document.getElementById(
+        "connectionStatus"
+    ).innerHTML =
+    "<span style='color:#ef4444'>❌ Connection Error</span>";
+});
+
+// ====================
+// NORMALIZE DATA
+// ====================
+
+function normalize(data){
+
+    return{
+
+        order_id:
+            data.order_id ?? "N/A",
+
+        status:
+            data.status ?? "Unknown",
+
+        inventory:
+            Number(
+                data.inventory ?? 0
+            ),
+
+        demand:
+            Number(
+                data.future_demand ??
+                data.predicted_demand ??
+                data.demand ??
+                0
+            ),
+
+        inventory_status:
+            data.inventory_level ??
+            data.inventory_status ??
+            "OK",
+
+        warehouse_id:
+            data.warehouse_id ??
+            "N/A",
+
+        alert:
+            data.alert ??
+            "NORMAL"
+    };
+}
+
+// ====================
+// REALTIME UPDATE
+// ====================
+
+socket.on(
+    "dashboard_update",
+    (data)=>{
+
+        console.log(
+            "Realtime Update:",
+            data
+        );
+
+        const order =
+            normalize(data);
+
+        orders[
+            order.order_id
+        ] = order;
+
+        renderDashboard();
+    }
+);
+
+// ====================
+// DASHBOARD RENDER
+// ====================
+
+function renderDashboard(){
+
+    const container =
+        document.getElementById(
+            "orders"
+        );
+
+    container.innerHTML = "";
+
+    let totalInventory = 0;
+    let totalDemand = 0;
+    let lowStock = 0;
+    let delivered = 0;
+    let cancelled = 0;
+
+    const values =
+        Object.values(orders);
+
+    values.forEach(order=>{
+
+        totalInventory +=
+            order.inventory;
+
+        totalDemand +=
+            order.demand;
+
+        if(
+            order.status ===
+            "Delivered"
+        ){
+            delivered++;
+        }
+
+        if(
+            order.status ===
+            "Cancelled"
+        ){
+            cancelled++;
+        }
+
+        let cls = "ok";
+
+        const invStatus =
+            String(
+                order.inventory_status
+            ).toUpperCase();
+
+        if(
+            invStatus.includes(
+                "LOW"
+            )
+        ){
+            cls = "low";
+            lowStock++;
+        }
+        else if(
+            invStatus.includes(
+                "WARNING"
+            )
+        ){
+            cls = "warning";
+        }
+
+        const statusClass =
+            String(
+                order.status
+            ).toLowerCase();
+
+        container.innerHTML += `
+            <div class="order-card ${cls}">
+                <h3>📦 ${order.order_id}</h3>
+
+                <p>
+                    Status:
+                    <span class="${statusClass}">
+                        ${order.status}
+                    </span>
+                </p>
+
+                <p>
+                    Warehouse:
+                    ${order.warehouse_id}
+                </p>
+
+                <p>
+                    Inventory:
+                    ${order.inventory}
+                </p>
+
+                <p>
+                    Demand:
+                    ${order.demand}
+                </p>
+
+                <p>
+                    Inventory State:
+                    ${order.inventory_status}
+                </p>
+
+                <p>
+                    Alert:
+                    ${order.alert}
+                </p>
+
+            </div>
+        `;
+    });
+
+    document.getElementById(
+        "totalOrders"
+    ).innerText =
+        values.length;
+
+    document.getElementById(
+        "deliveredOrders"
+    ).innerText =
+        delivered;
+
+    document.getElementById(
+        "cancelledOrders"
+    ).innerText =
+        cancelled;
+
+    document.getElementById(
+        "lowStock"
+    ).innerText =
+        lowStock;
+
+    document.getElementById(
+        "totalInventory"
+    ).innerText =
+        totalInventory;
+
+    document.getElementById(
+        "totalDemand"
+    ).innerText =
+        totalDemand;
+}
+
+</script>
+
+</body>
+</html>

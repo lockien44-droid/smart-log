@@ -1,0 +1,10 @@
+pandas
+numpy
+scikit-learn
+joblib
+firebase-admin
+Flask
+Flask-SocketIO
+python-socketio
+requests
+matplotlib

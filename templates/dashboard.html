@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Logistics Dashboard</title>
+
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        .logo { font-size: 26px; font-weight: bold; color: #38bdf8; }
+        button { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        #pauseBtn { background: #f59e0b; color: white; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: #1e293b; padding: 16px; border-radius: 10px; text-align: center; }
+        .stat-card h2 { font-size: 28px; color: #38bdf8; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 15px; }
+        .panel { background: #1e293b; border-radius: 12px; padding: 16px; }
+        .chart-container { position: relative; height: 240px; width: 100%; }
+        .mini-chart { height: 240px; overflow: auto; padding: 8px 4px; }
+        .bar-row { display: grid; grid-template-columns: 120px 1fr 60px; gap: 10px; align-items: center; margin: 10px 0; font-size: 0.9rem; }
+        .bar-label { color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bar-track { background: #334155; border-radius: 999px; height: 16px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 999px; min-width: 2px; }
+        .bar-value { color: #cbd5e1; text-align: right; }
+        .dual-row { margin: 12px 0; }
+        .dual-title { color: #e2e8f0; font-size: 0.85rem; margin-bottom: 4px; }
+        .legend { display:flex; gap:16px; margin: 6px 0 10px; font-size: 0.85rem; color:#cbd5e1; }
+        .legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; }
+        .legend .inv::before { background:#22c55e; }
+        .legend .demand::before { background:#f59e0b; }
+        .card { background: #1e293b; border-radius: 10px; padding: 14px; border-left: 5px solid #22c55e; margin-bottom: 10px; font-size: 0.95rem; }
+        .low { border-left-color: #ef4444; }
+        .warning { border-left-color: #f59e0b; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background: #334155; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo">Hệ thống theo dõi trạng thái đơn hàng và cập nhật tồn kho theo thời gian thực trong Smart Logistics</div>
+        <div>
+            <span id="realtimeStatus" style="color:#22c55e">🟢 Đang đồng bộ realtime qua Server Sync</span>
+            <button id="pauseBtn">⏸️ Tạm dừng</button>
+        </div>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card"><h2 id="totalOrders">0</h2><p>Tổng Orders</p></div>
+        <div class="stat-card"><h2 id="deliveredOrders">0</h2><p>Đã giao</p></div>
+        <div class="stat-card"><h2 id="cancelledOrders">0</h2><p>Đã hủy</p></div>
+        <div class="stat-card"><h2 id="lowStock">0</h2><p>Low Stock</p></div>
+        <div class="stat-card"><h2 id="reorderCount">0</h2><p>Cảnh báo reorder</p></div>
+        <div class="stat-card"><h2 id="totalInventory">0</h2><p>Tổng tồn kho</p></div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <h3>Phân bố trạng thái đơn hàng</h3>
+            <div class="chart-container"><div id="statusChart" class="mini-chart"></div></div>
+        </div>
+        <div class="panel">
+            <h3>Tồn kho vs Nhu cầu dự báo</h3>
+            <div class="chart-container"><div id="inventoryChart" class="mini-chart"></div></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Đơn hàng gần đây</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Order Quantity</th><th>Tồn kho</th><th>Dự báo</th><th>Mức tồn kho</th><th>Reorder Point</th><th>Cần nhập</th><th>Cảnh báo</th>
+                </tr>
+            </thead>
+            <tbody id="orderTableBody"></tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <h3>Chi tiết đơn hàng</h3>
+        <div id="orders" class="grid"></div>
+    </div>
+
+<script>
+let isPaused = false;
+let realtimeOrders = {};
+let renderTimer = null;
+
+function scheduleRender() {
+    if (renderTimer) return;
+
+    renderTimer = setTimeout(() => {
+        renderTimer = null;
+        renderDashboard(realtimeOrders);
+    }, 250);
+}
+
+async function syncOrdersFromServer() {
+    if (isPaused) return;
+
+    try {
+        const response = await fetch("/api/orders", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        if (!data || data.error) throw new Error(data?.error || "Invalid data");
+
+        realtimeOrders = data;
+        scheduleRender();
+        document.getElementById("realtimeStatus").innerHTML =
+            "🟢 Đang đồng bộ realtime qua Server Sync";
+    } catch (error) {
+        console.error("Server Sync failed:", error);
+        document.getElementById("realtimeStatus").innerHTML =
+            '<span style="color:#ef4444">🔴 Server Sync mất kết nối</span>';
+    }
+}
+
+// Khởi tạo Charts
+function renderStatusChart(statusCount) {
+    const container = document.getElementById("statusChart");
+    const colors = {
+        Pending: "#f97316",
+        Processing: "#3b82f6",
+        Shipping: "#eab308",
+        Delivered: "#22c55e",
+        Cancelled: "#ef4444"
+    };
+    const maxValue = Math.max(...Object.values(statusCount), 1);
+
+    container.innerHTML = Object.entries(statusCount).map(([label, value]) => `
+        <div class="bar-row">
+            <div class="bar-label">${label}</div>
+            <div class="bar-track">
+                <div class="bar-fill" style="width:${(value / maxValue) * 100}%; background:${colors[label] || "#38bdf8"}"></div>
+            </div>
+            <div class="bar-value">${value}</div>
+        </div>
+    `).join("");
+}
+
+function renderInventoryChart(orders) {
+    const container = document.getElementById("inventoryChart");
+    const maxValue = Math.max(
+        ...orders.flatMap(o => [Number(o.inventory) || 0, Number(o.future_demand) || 0]),
+        1
+    );
+
+    container.innerHTML = `
+        <div class="legend"><span class="inv">Tồn kho</span><span class="demand">Dự báo</span></div>
+        ${orders.map(o => {
+            const inventory = Number(o.inventory) || 0;
+            const demand = Number(o.future_demand) || 0;
+            return `
+                <div class="dual-row">
+                    <div class="dual-title">
+                        ${o.order_id || "N/A"} |
+                        Kho: <strong>${o.warehouse_id || "N/A"}</strong> |
+                        SP: ${o.product_id || "N/A"}
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-label">Tồn kho</div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${(inventory / maxValue) * 100}%; background:#22c55e"></div></div>
+                        <div class="bar-value">${inventory}</div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-label">Dự báo</div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${(demand / maxValue) * 100}%; background:#f59e0b"></div></div>
+                        <div class="bar-value">${demand}</div>
+                    </div>
+                </div>
+            `;
+        }).join("")}
+    `;
+}
+
+// Nút Tạm Dừng
+document.getElementById('pauseBtn').addEventListener('click', () => {
+    isPaused = !isPaused;
+    const btn = document.getElementById('pauseBtn');
+    const status = document.getElementById('realtimeStatus');
+    
+    if (isPaused) {
+        btn.textContent = '▶️ Tiếp tục';
+        btn.style.background = '#22c55e';
+        status.innerHTML = '⏸️ <span style="color:#f59e0b">Đã tạm dừng</span>';
+    } else {
+        btn.textContent = '⏸️ Tạm dừng';
+        btn.style.background = '#f59e0b';
+        status.innerHTML = '🟢 Đang đồng bộ realtime qua Server Sync';
+    }
+});
+
+function renderDashboard(data) {
+    const ordersDiv = document.getElementById("orders");
+    const tableBody = document.getElementById("orderTableBody");
+
+    ordersDiv.innerHTML = "";
+    tableBody.innerHTML = "";
+
+    let totalOrders = 0, delivered = 0, cancelled = 0, lowStock = 0, reorder = 0, totalInv = 0;
+    const statusCount = { Pending:0, Processing:0, Shipping:0, Delivered:0, Cancelled:0 };
+
+    const toTimestamp = value => {
+        if (typeof value === "number") return value;
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) return numeric;
+        const parsed = Date.parse(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const allOrders = Object.values(data);
+    const displayOrders = [...allOrders]
+        .sort((a, b) =>
+            toTimestamp(b.last_updated || b.timestamp) -
+            toTimestamp(a.last_updated || a.timestamp)
+        )
+        .slice(0, 30);
+
+    allOrders.forEach(o => {
+        totalOrders++;
+        totalInv += Number(o.inventory || 0);
+
+        if (o.status === "Delivered") delivered++;
+        if (o.status === "Cancelled") cancelled++;
+        if (o.reorder_required === true) reorder++;
+        if (statusCount[o.status] !== undefined) statusCount[o.status]++;
+
+        let statusClass = "ok";
+        const level = String(
+    o.inventory_level || ""
+);
+
+if (
+    level === "LOW" ||
+    level === "CRITICAL" ||
+    level === "OUT_OF_STOCK"
+) {
+    lowStock++;
+}
+else if (
+
+    String(o.inventory_level).includes("LOW")
+    ||
+    o.reorder_required === true
+
+) {
+
+    statusClass = "warning";
+    lowStock++;
+
+}
+    });
+
+    displayOrders.forEach(o => {
+        let statusClass = "ok";
+        const level = String(o.inventory_level || "");
+
+        if (
+            level === "LOW" ||
+            level === "CRITICAL" ||
+            level === "OUT_OF_STOCK" ||
+            String(o.inventory_level).includes("LOW") ||
+            o.reorder_required === true
+        ) {
+            statusClass = "warning";
+        }
+
+        ordersDiv.innerHTML += `
+            <div class="card ${statusClass}">
+                <strong>📦 ${o.order_id || 'N/A'}</strong><br>
+                <span style="color:${getStatusColor(o.status)}">${o.status || '-'}</span><br>
+                Kho: ${o.warehouse_id || '-'} | Order Quantity: ${o.order_quantity ?? 0} | Tồn: ${o.inventory ?? 0} | Demand: ${o.future_demand ?? 0}<br>
+                Level: <strong>${o.inventory_level || '-'}</strong> - ${o.inventory_level_description || getInventoryLevelDescription(o.inventory_level)}<br>
+                ROP: ${o.reorder_point ?? '-'} | Cần nhập: ${o.reorder_quantity ?? 0}<br>
+                Alert: <strong>${o.alert || 'NORMAL'}</strong>
+            </div>`;
+
+        tableBody.innerHTML += `
+            <tr>
+                <td>${o.order_id || '-'}</td>
+                <td>${o.status || '-'}</td>
+                <td>${o.warehouse_id || '-'}</td>
+                <td>${o.order_quantity ?? 0}</td>
+                <td>${o.inventory ?? 0}</td>
+                <td>${o.future_demand ?? 0}</td>
+                <td>${o.inventory_level || '-'} - ${o.inventory_level_description || getInventoryLevelDescription(o.inventory_level)}</td>
+                <td>${o.reorder_point ?? '-'}</td>
+                <td>${o.reorder_quantity ?? 0}</td>
+                <td>${o.alert || 'NORMAL'}</td>
+            </tr>`;
+    });
+    // Update Stats
+    document.getElementById("totalOrders").innerText = totalOrders;
+    document.getElementById("deliveredOrders").innerText = delivered;
+    document.getElementById("cancelledOrders").innerText = cancelled;
+    document.getElementById("lowStock").innerText = lowStock;
+    document.getElementById("reorderCount").innerText = reorder;
+    document.getElementById("totalInventory").innerText = totalInv;
+
+    const recent = displayOrders.slice(0, 10).reverse();
+    renderStatusChart(statusCount);
+    renderInventoryChart(recent);
+}
+
+function getStatusColor(status) {
+    const colors = { "Pending":"#f97316", "Processing":"#3b82f6", "Shipping":"#eab308", "Delivered":"#22c55e", "Cancelled":"#ef4444" };
+    return colors[status] || "#94a3b8";
+}
+
+function getInventoryLevelDescription(level) {
+    const descriptions = {
+        "NORMAL": "Tồn kho an toàn",
+        "LOW": "Tồn kho thấp",
+        "CRITICAL": "Tồn kho rất thấp",
+        "OUT_OF_STOCK": "Hết hàng"
+    };
+    return descriptions[level] || "Không xác định";
+}
+
+syncOrdersFromServer();
+setInterval(syncOrdersFromServer, 1000);
+</script>
+</body>
+</html>
