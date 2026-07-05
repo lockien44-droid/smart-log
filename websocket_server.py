@@ -6,6 +6,10 @@ import time
 from datetime import datetime
 from firebase_admin import db
 
+from inventory_manager import evaluate_inventory
+from predictor import get_model_info, predict_demand
+
+FIREBASE_IMPORT_ERROR = None
 try:
     from firebase_manager import (
         add_product_stock,
@@ -17,10 +21,17 @@ try:
         update_order_status,
         update_product_inventory_analysis,
     )
-    from inventory_manager import evaluate_inventory
-    from predictor import get_model_info, predict_demand
-except Exception:
+except Exception as error:
+    FIREBASE_IMPORT_ERROR = str(error)
+    add_product_stock = None
+    deduct_product_stock = None
     get_all_orders = None
+    get_order = None
+    get_product_stock = None
+    set_product_stock = None
+    update_order_status = None
+    update_product_inventory_analysis = None
+    print("[FIREBASE] Initialization failed:", FIREBASE_IMPORT_ERROR)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "smartlogistics"
@@ -161,6 +172,13 @@ def model_info():
 
 @app.route("/api/orders/process", methods=["POST"])
 def process_order():
+    if FIREBASE_IMPORT_ERROR or get_product_stock is None:
+        return jsonify({
+            "ok": False,
+            "error": "Firebase chưa khởi tạo được trên backend.",
+            "detail": FIREBASE_IMPORT_ERROR,
+        }), 503
+
     process_started = time.perf_counter()
     data = request.get_json(silent=True) or {}
     errors = {}
@@ -369,6 +387,13 @@ def process_order():
 
 @app.route("/api/products", methods=["POST"])
 def create_product():
+    if FIREBASE_IMPORT_ERROR or get_product_stock is None:
+        return jsonify({
+            "ok": False,
+            "error": "Firebase chưa khởi tạo được trên backend.",
+            "detail": FIREBASE_IMPORT_ERROR,
+        }), 503
+
     data = request.get_json(silent=True) or {}
     warehouse_id = str(data.get("warehouse_id", "")).strip()
     product_id = str(data.get("product_id", "")).strip()
