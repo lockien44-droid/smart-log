@@ -4,18 +4,25 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
 
 from prepare_kaggle_data import OUTPUT_FILE, prepare_dataset
-
 
 MODEL_PATH = Path("models/random_forest_model.pkl")
 FORECAST_HORIZON_DAYS = 7
 
-FEATURES = [
-    "warehouse_code",
-    "product_code",
+CATEGORICAL_FEATURES = [
+    "warehouse_id",
+    "product_id",
+]
+
+NUMERIC_FEATURES = [
+    "inventory_quantity",
     "daily_sales",
+    "incoming_stock",
     "sales_lag_1",
     "sales_lag_7",
     "sales_lag_14",
@@ -25,6 +32,7 @@ FEATURES = [
     "month",
     "is_weekend",
 ]
+FEATURES = CATEGORICAL_FEATURES + NUMERIC_FEATURES
 TARGET = "future_demand"
 
 
@@ -60,12 +68,40 @@ def train_model():
     X_test = test_df[FEATURES]
     y_test = test_df[TARGET]
 
-    model = RandomForestRegressor(
-        n_estimators=100,
-        max_depth=14,
-        min_samples_leaf=3,
-        random_state=42,
-        n_jobs=-1,
+    preprocessor = ColumnTransformer(
+        transformers=[
+            (
+                "categorical",
+                OneHotEncoder(
+                    handle_unknown="ignore",
+                    sparse_output=True,
+                ),
+                CATEGORICAL_FEATURES,
+            ),
+            (
+                "numeric",
+                "passthrough",
+                NUMERIC_FEATURES,
+            ),
+        ]
+    )
+
+    model = Pipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            (
+                "random_forest",
+                RandomForestRegressor(
+                    n_estimators=100,
+                    max_depth=14,
+                    min_samples_leaf=3,
+                    max_samples=0.15,
+                    max_features=0.7,
+                    random_state=42,
+                    n_jobs=-1,
+                ),
+            ),
+        ]
     )
 
     print("[AI] Training Random Forest...")
@@ -89,8 +125,14 @@ def train_model():
     print(f"R²   : {metrics['r2']:.4f}")
 
     print("\n===== FEATURE IMPORTANCE =====")
+    transformed_features = model.named_steps[
+        "preprocessor"
+    ].get_feature_names_out()
+    importances = model.named_steps[
+        "random_forest"
+    ].feature_importances_
     for feature, score in sorted(
-        zip(FEATURES, model.feature_importances_),
+        zip(transformed_features, importances),
         key=lambda item: item[1],
         reverse=True,
     ):
@@ -103,6 +145,16 @@ def train_model():
             "features": FEATURES,
             "forecast_horizon_days": FORECAST_HORIZON_DAYS,
             "metrics": metrics,
+            "model_name": "Random Forest Regressor",
+            "model_version": (
+                f"rf-v1-cutoff-{pd.Timestamp(cutoff_date).date()}"
+            ),
+            "encoding": "OneHotEncoder",
+            "n_estimators": 100,
+            "train_rows": len(train_df),
+            "test_rows": len(test_df),
+            "split": "80% / 20% theo thời gian",
+            "cutoff_date": str(pd.Timestamp(cutoff_date).date()),
             "source": (
                 "Kaggle: talhanazir168/"
                 "store-inventory-demand-forecasting-dataset"

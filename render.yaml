@@ -9,6 +9,6 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: FIREBASE_DATABASE_URL
-        value: https://smart-logistics-system-75a42-default-rtdb.asia-southeast1.firebasedatabase.app
+        value: https://smart-log-70043-default-rtdb.asia-southeast1.firebasedatabase.app
       - key: FIREBASE_CREDENTIAL_JSON
         sync: false

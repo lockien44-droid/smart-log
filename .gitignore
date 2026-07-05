@@ -9,6 +9,7 @@ venv/
 *.pem
 *firebase-adminsdk*.json
 smart-logistics-system-*.json
+serviceAccountKey.json
 
 # Local logs and IDE settings
 *.log

@@ -1,5 +1,4 @@
 import os
-import re
 import joblib
 import pandas as pd
 from datetime import datetime
@@ -7,10 +6,12 @@ from datetime import datetime
 MODEL_PATH = "models/random_forest_model.pkl"
 
 model = None
+MODEL_METADATA = {}
+MODEL_LOAD_ERROR = None
 
 FEATURE_COLUMNS = [
-    "warehouse_code",
-    "product_code",
+    "warehouse_id",
+    "product_id",
     "inventory_quantity",
     "daily_sales",
     "incoming_stock",
@@ -37,6 +38,11 @@ if os.path.exists(MODEL_PATH):
         if isinstance(data, dict):
 
             model = data.get("model")
+            MODEL_METADATA = {
+                key: value
+                for key, value in data.items()
+                if key != "model"
+            }
 
             FEATURE_COLUMNS = data.get(
                 "features",
@@ -52,6 +58,7 @@ if os.path.exists(MODEL_PATH):
         )
 
     except Exception as e:
+        MODEL_LOAD_ERROR = str(e)
 
         print(
             "[AI] Model Load Error:",
@@ -161,13 +168,9 @@ def build_features(
 
     now = datetime.now()
 
-    def id_number(value):
-        match = re.search(r"\d+", str(value))
-        return float(match.group()) if match else 0.0
-
     return {
-        "warehouse_code": id_number(warehouse_id),
-        "product_code": id_number(product_id),
+        "warehouse_id": str(warehouse_id),
+        "product_id": str(product_id),
         "inventory_quantity":
             inventory_quantity,
 
@@ -229,6 +232,18 @@ def fallback(
 # =====================================
 
 def predict_demand(**kwargs):
+    return_details = bool(kwargs.pop("return_details", False))
+
+    def result(value, mode, error=None):
+        normalized = max(0, min(int(round(float(value))), 100000))
+        if return_details:
+            return {
+                "future_demand": normalized,
+                "mode": mode,
+                "fallback_used": mode == "Fallback",
+                "error": error,
+            }
+        return normalized
 
     try:
 
@@ -285,7 +300,7 @@ def predict_demand(**kwargs):
 
         if model is None:
 
-            return fallback(
+            value = fallback(
                 kwargs.get(
                     "daily_sales",
                     0
@@ -301,6 +316,11 @@ def predict_demand(**kwargs):
                     0
                 )
             )
+            return result(
+                value,
+                "Fallback",
+                MODEL_LOAD_ERROR or "Không tìm thấy model .pkl",
+            )
 
         # =========================
         # MODEL PREDICT
@@ -315,33 +335,18 @@ def predict_demand(**kwargs):
             fill_value=0
         )
 
-        df = df.astype(
-            float
-        )
-
         prediction = model.predict(
             df
         )
 
         if prediction is None:
-
-            return 0
+            return result(0, "Fallback", "Model không trả về kết quả")
 
         value = float(
             prediction[0]
         )
 
-        value = int(
-            round(value)
-        )
-
-        return max(
-            0,
-            min(
-                value,
-                100000
-            )
-        )
+        return result(value, "Random Forest")
 
     except Exception as e:
 
@@ -350,7 +355,7 @@ def predict_demand(**kwargs):
             e
         )
 
-        return fallback(
+        value = fallback(
             kwargs.get(
                 "daily_sales",
                 0
@@ -366,3 +371,43 @@ def predict_demand(**kwargs):
                 0
             )
         )
+        return result(value, "Fallback", str(e))
+
+
+def get_model_info():
+    metrics = MODEL_METADATA.get("metrics", {})
+    return {
+        "name": MODEL_METADATA.get(
+            "model_name",
+            "Random Forest Regressor"
+        ),
+        "loaded": model is not None,
+        "mode": (
+            "Random Forest"
+            if model is not None
+            else "Fallback"
+        ),
+        "load_error": MODEL_LOAD_ERROR,
+        "encoding": MODEL_METADATA.get(
+            "encoding",
+            "Numeric code"
+        ),
+        "train_test": MODEL_METADATA.get(
+            "split",
+            "80% / 20%"
+        ),
+        "train_rows": MODEL_METADATA.get("train_rows"),
+        "test_rows": MODEL_METADATA.get("test_rows"),
+        "n_estimators": MODEL_METADATA.get(
+            "n_estimators",
+            100
+        ),
+        "mae": metrics.get("mae"),
+        "rmse": metrics.get("rmse"),
+        "r2": metrics.get("r2"),
+        "model_file": MODEL_PATH,
+        "model_version": MODEL_METADATA.get(
+            "model_version",
+            f"rf-{MODEL_METADATA.get('cutoff_date', 'unknown')}"
+        ),
+    }

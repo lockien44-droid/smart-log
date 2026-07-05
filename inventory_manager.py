@@ -113,6 +113,24 @@ def check_inventory(
         warehouse_id
     )
 
+    return evaluate_inventory(
+        stock=stock,
+        future_demand=future_demand,
+        lead_time=lead_time,
+        warehouse_id=warehouse_id
+    )
+
+
+def evaluate_inventory(
+    stock,
+    future_demand,
+    lead_time=1,
+    warehouse_id=None
+):
+    """Evaluate an explicit stock value, including stock stored in Firebase."""
+
+    stock = safe_int(stock)
+
     future_demand = safe_int(
         future_demand
     )
@@ -175,9 +193,7 @@ def check_inventory(
 
     return {
 
-        "warehouse_id": str(
-            warehouse_id
-        ),
+        "warehouse_id": str(warehouse_id or ""),
 
         "current_stock": int(
             stock

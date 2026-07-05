@@ -1,46 +1,11 @@
-import json
-import os
 import time
 from datetime import datetime
 
-import firebase_admin
-from firebase_admin import credentials, db
-
-# ==============================
-# CONFIG
-# ==============================
-FIREBASE_CREDENTIAL = os.environ.get(
-    "FIREBASE_CREDENTIAL_FILE",
-    "smart-logistics-system-75a42-a699f876beef.json"
-)
-
-DATABASE_URL = os.environ.get(
-    "FIREBASE_DATABASE_URL",
-    "https://smart-logistics-system-75a42-default-rtdb.asia-southeast1.firebasedatabase.app"
-)
+from firebase_config import database as db
 
 MAX_HISTORY = 20
 MAX_GPS_HISTORY = 50
 MAX_EVENTS = 100
-
-# ==============================
-# INIT FIREBASE SAFE
-# ==============================
-if not firebase_admin._apps:
-    try:
-        credential_json = os.environ.get("FIREBASE_CREDENTIAL_JSON")
-        if credential_json:
-            cred = credentials.Certificate(json.loads(credential_json))
-        else:
-            cred = credentials.Certificate(FIREBASE_CREDENTIAL)
-        firebase_admin.initialize_app(cred, {
-            "databaseURL": DATABASE_URL
-        })
-        print("[FIREBASE] Initialized successfully")
-
-    except Exception as e:
-        print("[FIREBASE INIT ERROR]", e)
-
 
 # ==============================
 # SAFE CONVERT
@@ -57,6 +22,112 @@ def safe_float(v, default=0.0):
         return float(v)
     except:
         return default
+
+
+# ==============================
+# PRODUCT INVENTORY
+# ==============================
+def _product_ref(warehouse_id, product_id):
+    return db.reference(
+        f"warehouses/{str(warehouse_id)}/products/{str(product_id)}"
+    )
+
+
+def get_product_stock(warehouse_id, product_id):
+    value = _product_ref(
+        warehouse_id,
+        product_id
+    ).child("stock").get()
+
+    if value is None:
+        return None
+
+    return safe_int(value)
+
+
+def set_product_stock(warehouse_id, product_id, quantity):
+    quantity = max(0, safe_int(quantity))
+    timestamp = time.time()
+
+    _product_ref(warehouse_id, product_id).update({
+        "warehouse_id": str(warehouse_id),
+        "product_id": str(product_id),
+        "stock": quantity,
+        "last_updated": timestamp,
+        "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+    return quantity
+
+
+def deduct_product_stock(
+    warehouse_id,
+    product_id,
+    order_quantity,
+    order_id=None,
+):
+    quantity = max(0, safe_int(order_quantity))
+    product_ref = _product_ref(warehouse_id, product_id)
+    stock_ref = product_ref.child("stock")
+
+    def deduct(current_stock):
+        stock = safe_int(current_stock)
+        if quantity > stock:
+            raise ValueError(
+                f"Không đủ tồn kho: còn {stock}, khách đặt {quantity}"
+            )
+        return stock - quantity
+
+    new_stock = stock_ref.transaction(deduct)
+    product_ref.update({
+        "last_updated": time.time(),
+        "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    product_ref.child("inventory_movements").push({
+        "type": "ORDER_DEDUCTION",
+        "order_id": str(order_id or ""),
+        "quantity": quantity,
+        "stock_before": safe_int(new_stock) + quantity,
+        "stock_after": safe_int(new_stock),
+        "timestamp": time.time(),
+        "time_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    return safe_int(new_stock)
+
+
+def add_product_stock(warehouse_id, product_id, incoming_quantity):
+    quantity = max(0, safe_int(incoming_quantity))
+    product_ref = _product_ref(warehouse_id, product_id)
+    stock_ref = product_ref.child("stock")
+
+    new_stock = stock_ref.transaction(
+        lambda current_stock: safe_int(current_stock) + quantity
+    )
+    product_ref.update({
+        "last_updated": time.time(),
+        "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    return safe_int(new_stock)
+
+
+def update_product_inventory_analysis(
+    warehouse_id,
+    product_id,
+    future_demand,
+    inventory_level,
+    reorder_point,
+    reorder_quantity,
+    reorder_required
+):
+    _product_ref(warehouse_id, product_id).update({
+        "future_demand": safe_int(future_demand),
+        "inventory_level": str(inventory_level),
+        "reorder_point": safe_int(reorder_point),
+        "reorder_quantity": safe_int(reorder_quantity),
+        "reorder_required": bool(reorder_required),
+        "last_updated": time.time(),
+        "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
 
 
 # ==============================
@@ -94,6 +165,16 @@ def update_order_status(
     reorder_quantity=None,
     inventory_level_description=None,
     order_quantity=None,
+    inventory_before=None,
+    processed=True,
+    processing_logs=None,
+    processing_latency_ms=None,
+    prediction_latency_ms=None,
+    model_mode=None,
+    model_version=None,
+    fallback_used=False,
+    prediction_error=None,
+    server_completed_at_ms=None,
 
     event_id=None
 ):
@@ -152,7 +233,9 @@ def update_order_status(
             "order_id": str(order_id),
             "status": str(status),
             "inventory": inventory,
+            "inventory_before": safe_int(inventory_before, inventory),
             "order_quantity": safe_int(order_quantity),
+            "processed": bool(processed),
             "future_demand": demand,
             "event": f"Order changed to {status}"
         })
@@ -218,7 +301,9 @@ def update_order_status(
             "order_id": str(order_id),
             "status": str(status),
             "inventory": inventory,
+            "inventory_before": safe_int(inventory_before, inventory),
             "order_quantity": safe_int(order_quantity),
+            "processed": bool(processed),
             "future_demand": demand,
 
             "inventory_level": inventory_level,
@@ -237,6 +322,22 @@ def update_order_status(
             "gps_history": gps_history,
             "events": events
         }
+
+        if processing_logs is not None:
+            data["processing_logs"] = list(processing_logs)
+        if processing_latency_ms is not None:
+            data["processing_latency_ms"] = safe_int(processing_latency_ms)
+        if prediction_latency_ms is not None:
+            data["prediction_latency_ms"] = safe_int(prediction_latency_ms)
+        if model_mode:
+            data["model_mode"] = str(model_mode)
+        if model_version:
+            data["model_version"] = str(model_version)
+        data["fallback_used"] = bool(fallback_used)
+        if prediction_error:
+            data["prediction_error"] = str(prediction_error)
+        if server_completed_at_ms is not None:
+            data["server_completed_at_ms"] = safe_int(server_completed_at_ms)
 
         # =========================
         # OPTIONAL FIELDS SAFE

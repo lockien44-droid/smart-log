@@ -56,13 +56,16 @@
         .nav-item { display:flex; gap:10px; align-items:center; padding:11px 12px; margin:3px 0; border-radius:8px; color:#4b5563; cursor:pointer; }
         .nav-item.active { color:#ee4d2d; background:#fff1ed; font-weight:700; }
         .menu-group { margin:5px 0; }
-        .menu-parent { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; color:#6b7280; font-size:13px; font-weight:700; border-radius:8px; }
+        .menu-parent { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; color:#6b7280; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
+        .menu-parent:hover, .menu-parent.active { color:#ee4d2d; background:#fff1ed; }
         .menu-parent-left { display:flex; align-items:center; gap:9px; }
         .menu-parent .chevron { color:#9ca3af; font-size:13px; }
         .submenu { margin:0 0 8px 27px; display:flex; flex-direction:column; gap:2px; }
+        .submenu.collapsed { display:none; }
         .submenu .nav-item { padding:6px 10px; margin:0; font-size:13px; border-radius:6px; }
         .submenu .nav-item.active { background:transparent; color:#ee4d2d; font-weight:800; }
         .menu-dot { width:6px; height:6px; border-radius:50%; background:#ee4d2d; display:inline-block; margin-left:3px; }
+        .sidebar > .menu-group:nth-child(n+9) { display:none; }
         .view-hidden { display:none !important; }
         .main-content { min-width:0; padding:0 24px 30px; }
         .topbar { height:48px; margin:0 -24px 20px; padding:0 24px; background:#fff; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,.04); position:sticky; top:0; z-index:30; }
@@ -77,15 +80,35 @@
         .topbar-brand-pill { border:1px solid #e5e7eb; border-radius:999px; padding:7px 13px; color:#6b7280; font-size:12px; font-weight:700; background:#fff; }
         .push-wrapper { position:relative; }
         .push-dropdown { position:absolute; top:38px; right:-120px; width:min(520px,calc(100vw - 40px)); background:#fff; border:1px solid #e5e7eb; box-shadow:0 8px 28px rgba(15,23,42,.18); display:none; z-index:80; }
-        .push-wrapper:hover .push-dropdown, .push-wrapper.open .push-dropdown { display:block; }
-        .push-dropdown-title { padding:14px 18px; color:#9ca3af; font-size:18px; border-bottom:1px solid #f3f4f6; }
+        .push-wrapper.open .push-dropdown { display:block; }
+        .push-dropdown-title { padding:14px 18px 10px; color:#6b7280; font-size:18px; border-bottom:1px solid #f3f4f6; }
+        .push-filter-tabs { display:flex; gap:6px; padding:8px 12px; overflow:auto; border-bottom:1px solid #f3f4f6; background:#fff; }
+        .push-filter-tab { border:0; background:#f3f4f6; color:#6b7280; padding:6px 9px; border-radius:999px; font-size:11px; white-space:nowrap; }
+        .push-filter-tab.active { background:#ee4d2d; color:#fff; }
         .push-dropdown-list { max-height:470px; overflow:auto; background:#fff7f4; }
-        .push-dropdown-item { display:grid; grid-template-columns:56px 1fr; gap:12px; padding:13px 18px; border-bottom:1px solid #fee2d5; color:#374151; }
+        .push-dropdown-item { position:relative; display:grid; grid-template-columns:48px 1fr; gap:11px; padding:12px 14px; border-bottom:1px solid #e5e7eb; border-left:5px solid #9ca3af; color:#374151; cursor:pointer; text-decoration:none; background:#fff; }
         .push-dropdown-item:hover { background:#fff1ed; }
-        .push-dropdown-icon { width:48px; height:48px; border-radius:8px; background:#ee4d2d; color:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:800; }
+        .alert-row-highlight { background:#fff1ed !important; outline:2px solid #ee4d2d; outline-offset:-2px; }
+        .push-dropdown-item.unread { background:#fff8f5; }
+        .push-dropdown-item.level-NORMAL { border-left-color:#22c55e; }
+        .push-dropdown-item.level-LOW { border-left-color:#eab308; }
+        .push-dropdown-item.level-CRITICAL { border-left-color:#f97316; }
+        .push-dropdown-item.level-OUT_OF_STOCK { border-left-color:#dc2626; }
+        .push-unread-dot { position:absolute; top:12px; right:10px; width:7px; height:7px; border-radius:50%; background:#ee4d2d; }
+        .push-dropdown-icon { width:42px; height:42px; border-radius:8px; background:#22c55e; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; }
+        .level-LOW .push-dropdown-icon { background:#eab308; }
+        .level-CRITICAL .push-dropdown-icon { background:#f97316; }
+        .level-OUT_OF_STOCK .push-dropdown-icon { background:#dc2626; }
+        .push-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding-right:10px; }
+        .push-level-badge { padding:3px 7px; border-radius:999px; background:#f3f4f6; font-size:10px; font-weight:800; white-space:nowrap; }
         .push-dropdown-item strong { display:block; color:#111827; margin-bottom:4px; font-size:15px; }
         .push-dropdown-item p { margin:0; color:#6b7280; line-height:1.35; font-size:13px; }
-        .push-dropdown-footer { display:block; text-align:center; padding:13px; color:#374151; background:#fff; text-decoration:none; border-top:1px solid #f3f4f6; }
+        .push-notification-time { display:block; margin-top:5px; color:#9ca3af; font-size:11px; }
+        .push-item-actions { display:flex; gap:12px; margin-top:7px; }
+        .push-item-action { border:0; background:transparent; color:#ee4d2d; padding:0; font-size:11px; font-weight:700; }
+        .push-dropdown-footer { display:flex; justify-content:space-between; align-items:center; padding:12px 15px; color:#374151; background:#fff; border-top:1px solid #f3f4f6; }
+        .push-footer-action { border:0; background:transparent; color:#6b7280; padding:0; font-size:12px; }
+        .push-footer-view { color:#ee4d2d; font-weight:700; }
         .push-empty { padding:24px; text-align:center; color:#9ca3af; background:#fff; }
         @keyframes bell-shake {
             0%, 100% { transform:rotate(0); }
@@ -148,6 +171,9 @@
         .toggle-label { display:flex; align-items:center; gap:8px; color:#4b5563; font-size:13px; white-space:nowrap; }
         .toggle-switch { width:42px; height:22px; background:#22c55e; border-radius:999px; position:relative; display:inline-block; }
         .toggle-switch::after { content:""; position:absolute; top:3px; right:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+        .toggle-label { cursor:pointer; user-select:none; }
+        .toggle-switch.off { background:#cbd5e1; }
+        .toggle-switch.off::after { right:23px; }
         .action-btn { background:#fff; color:#374151; border:1px solid #e5e7eb; border-radius:6px; padding:9px 13px; font-weight:600; }
         .action-btn.primary { background:#ee4d2d; color:#fff; border-color:#ee4d2d; }
         .inventory-tabs.shopee-tabs { padding:0 20px; margin:0; }
@@ -168,6 +194,36 @@
         .notification-panel { order:1; }
         #inventoryView > .grid { order:2; }
         .inventory-manage-card { order:3; }
+        .demo-grid { display:grid; grid-template-columns:1.15fr .85fr; gap:15px; margin-bottom:15px; }
+        .order-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+        .form-group { display:flex; flex-direction:column; gap:5px; }
+        .form-group label { color:#4b5563; font-size:12px; font-weight:700; }
+        .form-group input { padding:10px 11px; border:1px solid #d1d5db; border-radius:7px; outline:none; }
+        .form-group input:focus { border-color:#ee4d2d; box-shadow:0 0 0 3px rgba(238,77,45,.1); }
+        .form-actions { grid-column:1/-1; display:flex; align-items:center; gap:12px; }
+        .form-actions button { background:#ee4d2d; color:#fff; }
+        .form-message { font-size:13px; color:#6b7280; }
+        .form-message.error { color:#dc2626; }
+        .form-message.success { color:#15803d; }
+        .prediction-result { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+        .result-box { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:11px; }
+        .result-box span { display:block; color:#6b7280; font-size:11px; margin-bottom:4px; }
+        .result-box strong { color:#111827; font-size:18px; }
+        .metric-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+        .metric-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:10px; text-align:center; }
+        .metric-item span { display:block; color:#6b7280; font-size:11px; }
+        .metric-item strong { color:#ee4d2d; font-size:17px; }
+        .realtime-log { max-height:220px; overflow:auto; background:#111827; color:#d1fae5; border-radius:8px; padding:12px; font:12px Consolas,monospace; }
+        .log-line { padding:4px 0; border-bottom:1px solid #1f2937; }
+        .visual-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px; }
+        .visual-bars { display:flex; flex-direction:column; gap:9px; max-height:240px; overflow:auto; }
+        .visual-row { display:grid; grid-template-columns:105px 1fr 50px; align-items:center; gap:8px; font-size:12px; }
+        .visual-track { height:13px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
+        .visual-fill { height:100%; background:#22c55e; border-radius:999px; }
+        .visual-fill.demand { background:#f59e0b; }
+        .firebase-connected { color:#16a34a !important; }
+        .firebase-error { color:#dc2626 !important; }
+        .feature-hidden { display:none !important; }
         @media (max-width:900px) {
             .app-shell { grid-template-columns:1fr; }
             .sidebar { display:none; }
@@ -175,6 +231,9 @@
             .topbar { margin:0 -12px 15px; padding:0 12px; }
             .header { margin:0 -12px 15px; padding:14px 12px; }
             .filter-panel { grid-template-columns:1fr; }
+            .demo-grid, .visual-grid { grid-template-columns:1fr; }
+            .order-form { grid-template-columns:1fr; }
+            .metric-grid { grid-template-columns:repeat(2,1fr); }
         }
     </style>
 </head>
@@ -185,29 +244,32 @@
         <div class="brand">SMART LOGISTICS<small>Inventory Management</small></div>
         <div id="dashboardNav" class="nav-item active">🏠 Dashboard tổng quan</div>
         <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">▣ Vận chuyển</span>
+            <div id="orderManagementNav" class="menu-parent">
+                <span class="menu-parent-left">▣ Quản lý đơn hàng</span>
                 <span class="chevron">⌄</span>
             </div>
         </div>
         <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">▤ Quản Lý Đơn Hàng</span>
+            <div id="forecastNav" class="menu-parent">
+                <span class="menu-parent-left">🤖 Dự báo nhu cầu</span>
                 <span class="chevron">⌄</span>
             </div>
         </div>
         <div class="menu-group">
-            <div class="menu-parent">
+            <div id="productMenuToggle" class="menu-parent">
                 <span class="menu-parent-left">▧ Quản Lý Sản Phẩm</span>
                 <span class="chevron">⌃</span>
             </div>
-            <div class="submenu">
-                <div class="nav-item">Tất Cả Sản Phẩm</div>
-                <div class="nav-item">Thêm Sản Phẩm</div>
+            <div id="productSubmenu" class="submenu">
+                <div id="allProductsNav" class="nav-item">Tất Cả Sản Phẩm</div>
+                <div id="addProductNav" class="nav-item">Thêm Sản Phẩm</div>
                 <div id="orderDetailsNav" class="nav-item">Chi tiết đơn hàng</div>
                 <div id="inventoryNav" class="nav-item">Quản Lý Tồn Kho</div>
             </div>
         </div>
+        <div id="alertNav" class="nav-item">🔔 Cảnh báo tồn kho</div>
+        <div id="historyNav" class="nav-item">🕘 Lịch sử đồng bộ</div>
+        <div id="settingsNav" class="nav-item">⚙ Cài đặt</div>
         <div class="menu-group">
             <div class="menu-parent">
                 <span class="menu-parent-left">◇ Kênh Marketing</span>
@@ -281,10 +343,20 @@
                 </span>
                 <div id="pushDropdown" class="push-dropdown">
                     <div class="push-dropdown-title">Thông Báo Mới Nhận</div>
+                    <div id="pushFilterTabs" class="push-filter-tabs">
+                        <button class="push-filter-tab active" data-filter="ALL">Tất cả</button>
+                        <button class="push-filter-tab" data-filter="CRITICAL">Nguy cấp</button>
+                        <button class="push-filter-tab" data-filter="LOW">Sắp hết</button>
+                        <button class="push-filter-tab" data-filter="OUT_OF_STOCK">Hết hàng</button>
+                        <button class="push-filter-tab" data-filter="READ">Đã đọc</button>
+                    </div>
                     <div id="pushDropdownList" class="push-dropdown-list">
                         <div class="push-empty">Chưa có thông báo mới.</div>
                     </div>
-                    <a class="push-dropdown-footer" href="javascript:void(0)">Xem tất cả</a>
+                    <div class="push-dropdown-footer">
+                        <button id="markAllReadBtn" class="push-footer-action">Đánh dấu tất cả đã đọc</button>
+                        <button id="viewAllAlertsBtn" class="push-footer-action push-footer-view">Xem tất cả</button>
+                    </div>
                 </div>
             </span>
             <span class="topbar-brand-pill">Trung Tâm Trợ Giúp</span>
@@ -296,16 +368,18 @@
     </div>
 
     <div id="overviewView">
-    <div class="panel overview-panel">
+    <div id="overviewSection" class="panel overview-panel">
         <div class="section-heading">
             <div>
                 <h3>Tổng quan tồn kho</h3>
                 <span>Nắm nhanh tình trạng hàng hóa trên toàn bộ kho</span>
             </div>
             <div class="overview-meta">
+                <span>🔥 Firebase: <strong id="firebaseConnection">Đang kết nối</strong></span>
+                <span>📡 Nodes: <strong>orders + warehouses</strong></span>
                 <span>🔄 Đồng bộ: <strong id="lastSyncTime">--:--:--</strong></span>
                 <span>🕒 Dữ liệu mới nhất: <strong id="latestDataTime">Chưa có</strong></span>
-                <span>⚡ Chu kỳ: <strong>1 giây</strong></span>
+                <span>⚡ Đồng bộ: <strong>Firebase onValue</strong></span>
             </div>
         </div>
         <div class="stats">
@@ -317,20 +391,116 @@
             <div class="stat-card"><h2 id="reorderCount">0</h2><p>Cần bổ sung hàng</p></div>
         </div>
     </div>
+
+    <div id="orderFormSection" class="demo-grid">
+        <div class="panel">
+            <div class="section-heading">
+                <h3>Tạo đơn hàng realtime</h3>
+                <span>Random Forest → Firebase → Dashboard</span>
+            </div>
+            <form id="newOrderForm" class="order-form">
+                <div class="form-group"><label>Mã đơn hàng</label><input id="formOrderId" required placeholder="DEMO_001"></div>
+                <div class="form-group"><label>Mã sản phẩm / SKU</label><input id="formProductId" required placeholder="PRD001"></div>
+                <div class="form-group"><label>Mã kho</label><input id="formWarehouseId" required placeholder="WH01"></div>
+                <div class="form-group"><label>Số lượng đặt</label><input id="formOrderQuantity" type="number" min="1" required value="15"></div>
+                <div class="form-group"><label>Lead time (ngày)</label><input id="formLeadTime" type="number" min="1" step="1" required value="3"></div>
+                <div class="form-group"><label>Ngày đặt hàng</label><input id="formOrderDate" type="date" required></div>
+                <div class="form-group"><label>Doanh số/ngày</label><input id="formDailySales" type="number" min="0" value="20"></div>
+                <div class="form-group"><label>Tồn ban đầu nếu SKU mới</label><input id="formInitialStock" type="number" min="0" placeholder="Ví dụ: 320"></div>
+                <div class="form-actions">
+                    <button id="submitOrderBtn" type="submit">Chạy dự báo / Tạo đơn hàng</button>
+                    <span id="formMessage" class="form-message">Nhập dữ liệu để bắt đầu demo.</span>
+                </div>
+            </form>
+        </div>
+        <div class="panel">
+            <div class="section-heading">
+                <h3>Kết quả xử lý</h3>
+                <span>AI dự báo và logic tồn kho</span>
+            </div>
+            <div class="prediction-result">
+                <div class="result-box"><span>Tồn kho hiện tại</span><strong id="resultBefore">-</strong></div>
+                <div class="result-box"><span>Số lượng đặt</span><strong id="resultQuantity">-</strong></div>
+                <div class="result-box"><span>Nhu cầu dự báo RF</span><strong id="resultDemand">-</strong></div>
+                <div class="result-box"><span>Tồn kho sau xử lý</span><strong id="resultAfter">-</strong></div>
+                <div class="result-box"><span>Reorder Point</span><strong id="resultRop">-</strong></div>
+                <div class="result-box"><span>Cần nhập thêm</span><strong id="resultReorder">-</strong></div>
+                <div class="result-box"><span>Mức tồn kho</span><strong id="resultLevel">-</strong></div>
+                <div class="result-box"><span>Cảnh báo</span><strong id="resultAlert">-</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modelSection" class="panel" style="margin-bottom:15px">
+        <div class="section-heading">
+            <h3>Đánh giá mô hình Random Forest</h3>
+            <span id="modelLoadStatus">Đang đọc model...</span>
+        </div>
+        <div class="metric-grid">
+            <div class="metric-item"><span>Train / Test</span><strong>80% / 20%</strong></div>
+            <div class="metric-item"><span>MAE</span><strong id="metricMae">22.19</strong></div>
+            <div class="metric-item"><span>RMSE</span><strong id="metricRmse">30.32</strong></div>
+            <div class="metric-item"><span>R²</span><strong id="metricR2">0.9787</strong></div>
+            <div class="metric-item"><span>Số cây</span><strong>100</strong></div>
+        </div>
+    </div>
+
+    <div id="chartsSection" class="visual-grid">
+        <div class="panel">
+            <div class="section-heading"><h3>Tồn kho so với dự báo</h3><span>10 SKU mới nhất</span></div>
+            <div id="stockForecastChart" class="visual-bars"></div>
+        </div>
+        <div class="panel">
+            <div class="section-heading"><h3>Phân bố mức tồn kho</h3><span>Realtime từ orders</span></div>
+            <div id="stockLevelChart" class="visual-bars"></div>
+        </div>
+    </div>
+
+    <div id="realtimeLogSection" class="panel" style="margin-bottom:15px">
+        <div class="section-heading"><h3>Nhật ký realtime</h3><span>Chứng minh cập nhật không reload</span></div>
+        <div id="realtimeLog" class="realtime-log"><div class="log-line">Đang chờ đơn hàng mới...</div></div>
+    </div>
+
+    <div id="addProductSection" class="panel feature-hidden" style="margin-bottom:15px">
+        <div class="section-heading">
+            <h3>Thêm sản phẩm vào kho</h3>
+            <span>Tạo SKU mới và đồng bộ Firebase realtime</span>
+        </div>
+        <form id="addProductForm" class="order-form">
+            <div class="form-group"><label>Mã kho</label><input id="newProductWarehouse" required placeholder="WH01"></div>
+            <div class="form-group"><label>Mã sản phẩm / SKU</label><input id="newProductId" required placeholder="SKU_NEW_001"></div>
+            <div class="form-group"><label>Tồn kho ban đầu</label><input id="newProductStock" type="number" min="0" required value="100"></div>
+            <div class="form-actions">
+                <button id="addProductBtn" type="submit">Thêm sản phẩm</button>
+                <span id="addProductMessage" class="form-message">Sản phẩm mới sẽ xuất hiện ngay trong bảng tồn kho.</span>
+            </div>
+        </form>
+    </div>
+
+    <div id="alertsSection" class="panel feature-hidden" style="margin-bottom:15px">
+        <div class="section-heading">
+            <h3>Cảnh báo tồn kho realtime</h3>
+            <span>LOW, CRITICAL và OUT_OF_STOCK</span>
+        </div>
+        <div class="table-wrap"><table>
+            <thead><tr><th>Mã đơn</th><th>Kho</th><th>SKU</th><th>Tồn kho</th><th>Dự báo</th><th>Mức</th><th>Cần nhập</th><th>Cập nhật</th></tr></thead>
+            <tbody id="alertsPageBody"></tbody>
+        </table></div>
+    </div>
     </div>
 
     <div id="inventoryView">
 
-    <div class="panel inventory-manage-card">
+    <div id="orderListSection" class="panel inventory-manage-card">
         <div class="inventory-manage-header">
             <div class="inventory-manage-title">
                 <h3>Đơn hàng gần đây</h3>
             </div>
             <div class="inventory-actions">
-                <span class="toggle-label">Thông báo sắp hết hàng <span class="toggle-switch"></span></span>
-                <button class="action-btn">⬇ Tải xuống toàn bộ</button>
-                <button class="action-btn">☷</button>
-                <button class="action-btn primary">▣ Cập nhật hàng loạt</button>
+                <span id="stockAlertToggle" class="toggle-label" role="button" tabindex="0">
+                    Thông báo sắp hết hàng
+                    <span id="stockAlertSwitch" class="toggle-switch"></span>
+                </span>
             </div>
         </div>
         <div class="section-heading">
@@ -368,17 +538,31 @@
             </select>
         </div>
         <div class="filter-buttons" style="padding:0 20px 14px;">
-            <button class="primary" onclick="scheduleRender()">Tìm kiếm</button>
-            <button class="secondary" onclick="resetInventoryFilters()">Cài đặt lại</button>
+            <button id="inventorySearchBtn" class="primary" type="button">Tìm kiếm</button>
         </div>
         <div class="inventory-note">ℹ️ Sử dụng các bộ lọc để phân loại sản phẩm tồn kho dễ dàng và theo dõi cảnh báo bổ sung hàng.</div>
         <div class="table-wrap"><table>
             <thead>
                 <tr>
-                    <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Order Quantity</th><th>Tồn kho</th><th>Dự báo</th><th>Mức tồn kho</th><th>Mức độ bổ sung</th><th>Reorder Point</th><th>Cần nhập</th>
+                    <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Order Quantity</th><th>Tồn trước</th><th>Tồn sau</th><th>Dự báo</th><th>Mức tồn kho</th><th>Mức độ bổ sung</th><th>Reorder Point</th><th>Cần nhập</th>
                 </tr>
             </thead>
             <tbody id="orderTableBody"></tbody>
+        </table></div>
+    </div>
+
+    <div id="warehouseInventorySection" class="panel inventory-manage-card">
+        <div class="section-heading">
+            <h3>Tồn kho thực tế theo kho và sản phẩm</h3>
+            <span>Cập nhật trực tiếp từ nhánh warehouses bằng Firebase onValue</span>
+        </div>
+        <div class="table-wrap"><table>
+            <thead>
+                <tr>
+                    <th>Kho</th><th>Sản phẩm</th><th>Tồn hiện tại</th><th>Dự báo</th><th>Mức tồn kho</th><th>Reorder Point</th><th>Cần nhập</th><th>Cập nhật</th>
+                </tr>
+            </thead>
+            <tbody id="warehouseTableBody"></tbody>
         </table></div>
     </div>
     </div>
@@ -397,9 +581,22 @@
 <script>
 let isPaused = false;
 let realtimeOrders = {};
+let realtimeWarehouses = {};
 let renderTimer = null;
 let alertSnapshotInitialized = false;
 const knownAlerts = new Set();
+let appliedInventoryFilters = {
+    query: "",
+    warehouse: "",
+    level: ""
+};
+let stockAlertsEnabled =
+    localStorage.getItem("stockAlertsEnabled") !== "false";
+let pushNotificationFilter = "ALL";
+let currentNotificationAlerts = [];
+const readNotificationKeys = new Set(
+    JSON.parse(localStorage.getItem("readNotificationKeys") || "[]")
+);
 
 const dashboardNav = document.getElementById("dashboardNav");
 const inventoryNav = document.getElementById("inventoryNav");
@@ -408,6 +605,15 @@ const breadcrumbCurrent = document.getElementById("breadcrumbCurrent");
 const overviewView = document.getElementById("overviewView");
 const inventoryView = document.getElementById("inventoryView");
 const orderDetailsView = document.getElementById("orderDetailsView");
+const orderManagementNav = document.getElementById("orderManagementNav");
+const forecastNav = document.getElementById("forecastNav");
+const productMenuToggle = document.getElementById("productMenuToggle");
+const productSubmenu = document.getElementById("productSubmenu");
+const allProductsNav = document.getElementById("allProductsNav");
+const addProductNav = document.getElementById("addProductNav");
+const alertNav = document.getElementById("alertNav");
+const historyNav = document.getElementById("historyNav");
+const settingsNav = document.getElementById("settingsNav");
 
 function showMenuView(activeNav, activeView) {
     [overviewView, inventoryView, orderDetailsView].forEach(view =>
@@ -421,29 +627,161 @@ function showMenuView(activeNav, activeView) {
 }
 
 dashboardNav.addEventListener("click", () => {
-    [overviewView, inventoryView, orderDetailsView].forEach(view =>
-        view.classList.add("view-hidden")
-    );
     [dashboardNav, inventoryNav, orderDetailsNav].forEach(nav =>
         nav.classList.remove("active")
     );
-    overviewView.classList.remove("view-hidden");
-    inventoryView.classList.remove("view-hidden");
+    showDashboardPage();
     dashboardNav.classList.add("active");
     breadcrumbCurrent.textContent = "Dashboard tổng quan";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+const featureSectionIds = [
+    "overviewSection",
+    "orderFormSection",
+    "modelSection",
+    "chartsSection",
+    "realtimeLogSection",
+    "addProductSection",
+    "alertsSection",
+    "orderListSection",
+    "warehouseInventorySection"
+];
+
+const dashboardSectionIds = [
+    "overviewSection",
+    "orderFormSection",
+    "modelSection",
+    "chartsSection",
+    "realtimeLogSection",
+    "orderListSection",
+    "warehouseInventorySection"
+];
+
+function showMainDashboard() {
+    overviewView.classList.remove("view-hidden");
+    inventoryView.classList.remove("view-hidden");
+    orderDetailsView.classList.add("view-hidden");
+}
+
+function showSections(sectionIds) {
+    showMainDashboard();
+    featureSectionIds.forEach(id => {
+        document.getElementById(id)?.classList.add("feature-hidden");
+    });
+    sectionIds.forEach(id => {
+        document.getElementById(id)?.classList.remove("feature-hidden");
+    });
+}
+
+function showDashboardPage() {
+    showSections(dashboardSectionIds);
+}
+
+function activateMenu(element, breadcrumb, sectionIds) {
+    document.querySelectorAll(
+        ".sidebar .nav-item.active, .sidebar .menu-parent.active"
+    ).forEach(item => item.classList.remove("active"));
+    element.classList.add("active");
+    const sections = Array.isArray(sectionIds) ? sectionIds : [sectionIds];
+    showSections(sections);
+    breadcrumbCurrent.textContent = breadcrumb;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+window.openAlertNotification = orderId => {
+    activateMenu(alertNav, "Cảnh báo tồn kho", "alertsSection");
+    document.getElementById("pushWrapper").classList.remove("open");
+
+    setTimeout(() => {
+        const targetRow = Array.from(
+            document.querySelectorAll("#alertsPageBody tr[data-order-id]")
+        ).find(row => row.dataset.orderId === String(orderId));
+        if (!targetRow) {
+            document.getElementById("alertsSection")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+            return;
+        }
+        targetRow.classList.add("alert-row-highlight");
+        targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => targetRow.classList.remove("alert-row-highlight"), 3000);
+    }, 400);
+    return false;
+};
+
+orderManagementNav.addEventListener("click", () => {
+    activateMenu(
+        orderManagementNav,
+        "Quản lý đơn hàng",
+        ["orderFormSection", "orderListSection"]
+    );
+});
+
+forecastNav.addEventListener("click", () => {
+    activateMenu(
+        forecastNav,
+        "Dự báo nhu cầu",
+        ["modelSection", "chartsSection"]
+    );
+});
+
+productMenuToggle.addEventListener("click", () => {
+    productSubmenu.classList.toggle("collapsed");
+    productMenuToggle.querySelector(".chevron").textContent =
+        productSubmenu.classList.contains("collapsed") ? "⌄" : "⌃";
+});
+
+allProductsNav.addEventListener("click", () => {
+    activateMenu(
+        allProductsNav,
+        "Tất cả sản phẩm",
+        "warehouseInventorySection"
+    );
+});
+
+addProductNav.addEventListener("click", () => {
+    activateMenu(
+        addProductNav,
+        "Thêm sản phẩm",
+        "addProductSection"
+    );
+    document.getElementById("newProductId").focus();
+});
+
+alertNav.addEventListener("click", event => {
+    event.stopPropagation();
+    activateMenu(
+        alertNav,
+        "Cảnh báo tồn kho",
+        "alertsSection"
+    );
+    document.getElementById("pushWrapper").classList.remove("open");
+});
+
+historyNav.addEventListener("click", () => {
+    activateMenu(
+        historyNav,
+        "Lịch sử đồng bộ",
+        "realtimeLogSection"
+    );
+});
+
+settingsNav.addEventListener("click", () => {
+    activateMenu(
+        settingsNav,
+        "Cài đặt hệ thống",
+        "overviewSection"
+    );
 });
 
 inventoryNav.addEventListener("click", () => {
-    [overviewView, inventoryView, orderDetailsView].forEach(view =>
-        view.classList.add("view-hidden")
+    activateMenu(
+        inventoryNav,
+        "Quản lý tồn kho",
+        ["warehouseInventorySection", "orderListSection"]
     );
-    [dashboardNav, inventoryNav, orderDetailsNav].forEach(nav =>
-        nav.classList.remove("active")
-    );
-    overviewView.classList.remove("view-hidden");
-    inventoryView.classList.remove("view-hidden");
-    inventoryNav.classList.add("active");
-    breadcrumbCurrent.textContent = "Quản Lý Tồn Kho";
 });
 
 orderDetailsNav.addEventListener("click", () => {
@@ -456,14 +794,79 @@ document.getElementById("pushNotificationIcon").addEventListener("click", event 
     document.getElementById("pushWrapper").classList.toggle("open");
 });
 
+document.getElementById("pushDropdownList").addEventListener("click", event => {
+    const item = event.target.closest(".push-dropdown-item");
+    if (!item) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    markNotificationRead(item.dataset.notificationKey);
+    if (event.target.closest('[data-action="mark-read"]')) {
+        renderPushDropdown(currentNotificationAlerts);
+        return;
+    }
+    const orderId = item.dataset.orderId || "";
+    window.openAlertNotification(orderId);
+});
+
+document.getElementById("viewAllAlertsBtn").addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    activateMenu(alertNav, "Cảnh báo tồn kho", "alertsSection");
+    document.getElementById("pushWrapper").classList.remove("open");
+});
+
+document.getElementById("markAllReadBtn").addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    currentNotificationAlerts.forEach(order =>
+        readNotificationKeys.add(alertKey(order))
+    );
+    saveReadNotificationKeys();
+    renderPushDropdown(currentNotificationAlerts);
+});
+
+document.getElementById("pushFilterTabs").addEventListener("click", event => {
+    const tab = event.target.closest(".push-filter-tab");
+    if (!tab) return;
+    event.stopPropagation();
+    pushNotificationFilter = tab.dataset.filter;
+    document.querySelectorAll(".push-filter-tab").forEach(button =>
+        button.classList.toggle("active", button === tab)
+    );
+    renderPushDropdown(currentNotificationAlerts);
+});
+
 document.addEventListener("click", () => {
     document.getElementById("pushWrapper").classList.remove("open");
 });
 
-["searchInput", "warehouseFilter", "levelFilter"].forEach(id => {
-    document.getElementById(id).addEventListener("input", () => {
-        scheduleRender();
-    });
+function applyInventoryFilters() {
+    appliedInventoryFilters = {
+        query: document.getElementById("searchInput").value
+            .trim().toLowerCase(),
+        warehouse: document.getElementById("warehouseFilter").value,
+        level: document.getElementById("levelFilter").value
+    };
+    scheduleRender();
+}
+
+document.getElementById("inventorySearchBtn").addEventListener(
+    "click",
+    applyInventoryFilters
+);
+document.getElementById("searchInput").addEventListener("keydown", event => {
+    if (event.key === "Enter") applyInventoryFilters();
+});
+document.getElementById("searchInput").addEventListener("input", event => {
+    if (event.target.value !== "") return;
+    document.getElementById("warehouseFilter").value = "";
+    document.getElementById("levelFilter").value = "";
+    appliedInventoryFilters = { query: "", warehouse: "", level: "" };
+    document.querySelectorAll(".inventory-tab").forEach(button =>
+        button.classList.toggle("active", button.dataset.level === "")
+    );
+    scheduleRender();
 });
 
 document.querySelectorAll(".inventory-tab").forEach(tabButton => {
@@ -474,18 +877,44 @@ document.querySelectorAll(".inventory-tab").forEach(tabButton => {
         tabButton.classList.add("active");
         document.getElementById("levelFilter").value =
             tabButton.dataset.level || "";
+        appliedInventoryFilters.level = tabButton.dataset.level || "";
         scheduleRender();
     });
 });
 
-document.getElementById("levelFilter").addEventListener("change", event => {
-    document.querySelectorAll(".inventory-tab").forEach(button => {
-        button.classList.toggle(
-            "active",
-            button.dataset.level === event.target.value
-        );
-    });
+function updateStockAlertToggle() {
+    document.getElementById("stockAlertSwitch").classList.toggle(
+        "off",
+        !stockAlertsEnabled
+    );
+    document.getElementById("stockAlertToggle").title =
+        stockAlertsEnabled
+            ? "Đang bật thông báo sắp hết hàng"
+            : "Đang tắt thông báo sắp hết hàng";
+}
+
+function toggleStockAlerts() {
+    stockAlertsEnabled = !stockAlertsEnabled;
+    localStorage.setItem("stockAlertsEnabled", String(stockAlertsEnabled));
+    updateStockAlertToggle();
+    scheduleRender();
+    if (!stockAlertsEnabled) {
+        document.getElementById("toastContainer").innerHTML = "";
+        document.getElementById("pushWrapper").classList.remove("open");
+    }
+}
+
+document.getElementById("stockAlertToggle").addEventListener(
+    "click",
+    toggleStockAlerts
+);
+document.getElementById("stockAlertToggle").addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleStockAlerts();
+    }
 });
+updateStockAlertToggle();
 
 function scheduleRender() {
     if (renderTimer) return;
@@ -496,28 +925,184 @@ function scheduleRender() {
     }, 250);
 }
 
-async function syncOrdersFromServer() {
+let latestFirebaseOrders = {};
+
+window.applyFirebaseOrders = data => {
+    latestFirebaseOrders = data || {};
     if (isPaused) return;
 
-    try {
-        const response = await fetch("/api/orders", { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    detectNewAlerts(latestFirebaseOrders);
+    realtimeOrders = latestFirebaseOrders;
+    scheduleRender();
+    renderStockLevelChart(Object.values(latestFirebaseOrders));
+    renderLatestRealtimeLog(Object.values(latestFirebaseOrders));
+    renderAlertsPage(Object.values(latestFirebaseOrders));
+    document.getElementById("lastSyncTime").textContent =
+        new Date().toLocaleTimeString("vi-VN");
+    document.getElementById("firebaseConnection").textContent = "Connected";
+    document.getElementById("firebaseConnection").className =
+        "firebase-connected";
+    document.getElementById("realtimeStatus").innerHTML =
+        "🟢 Đang đồng bộ trực tiếp qua Firebase onValue";
+};
 
-        const data = await response.json();
-        if (!data || data.error) throw new Error(data?.error || "Invalid data");
+function renderAlertsPage(orders) {
+    const alerts = orders
+        .filter(isWarningOrder)
+        .sort((a, b) =>
+            Number(b.last_updated || 0) - Number(a.last_updated || 0)
+        );
+    const body = document.getElementById("alertsPageBody");
+    body.innerHTML = alerts.length
+        ? alerts.map(order => `
+            <tr data-order-id="${order.order_id || ""}">
+                <td>${order.order_id || "-"}</td>
+                <td>${order.warehouse_id || "-"}</td>
+                <td>${order.product_id || "-"}</td>
+                <td>${order.inventory ?? 0}</td>
+                <td>${order.future_demand ?? 0}</td>
+                <td><span class="level-badge level-${order.inventory_level}">${order.inventory_level}</span></td>
+                <td>${order.reorder_quantity ?? 0}</td>
+                <td>${order.last_updated_text || "-"}</td>
+            </tr>
+        `).join("")
+        : '<tr><td colspan="8">Không có cảnh báo tồn kho.</td></tr>';
+}
 
-        detectNewAlerts(data);
-        realtimeOrders = data;
-        scheduleRender();
-        document.getElementById("lastSyncTime").textContent =
-            new Date().toLocaleTimeString("vi-VN");
-        document.getElementById("realtimeStatus").innerHTML =
-            "🟢 Đang đồng bộ realtime qua Server Sync";
-    } catch (error) {
-        console.error("Server Sync failed:", error);
-        document.getElementById("realtimeStatus").innerHTML =
-            '<span style="color:#ef4444">🔴 Server Sync mất kết nối</span>';
+window.handleFirebaseError = error => {
+    console.error("Firebase onValue failed:", error);
+    document.getElementById("realtimeStatus").innerHTML =
+        '<span style="color:#ef4444">🔴 Firebase mất kết nối</span>';
+    document.getElementById("firebaseConnection").textContent =
+        "Disconnected";
+    document.getElementById("firebaseConnection").className =
+        "firebase-error";
+};
+
+window.applyFirebaseWarehouses = data => {
+    realtimeWarehouses = data || {};
+    renderWarehouseInventory(realtimeWarehouses);
+    renderStockForecastChart(realtimeWarehouses);
+};
+
+function renderStockLevelChart(orders) {
+    const levels = {
+        NORMAL: 0,
+        LOW: 0,
+        CRITICAL: 0,
+        OUT_OF_STOCK: 0
+    };
+    orders.forEach(order => {
+        const level = order.inventory_level || "NORMAL";
+        if (levels[level] !== undefined) levels[level]++;
+    });
+    const max = Math.max(1, ...Object.values(levels));
+    const colors = {
+        NORMAL: "#22c55e",
+        LOW: "#eab308",
+        CRITICAL: "#f97316",
+        OUT_OF_STOCK: "#ef4444"
+    };
+    document.getElementById("stockLevelChart").innerHTML =
+        Object.entries(levels).map(([level, count]) => `
+            <div class="visual-row">
+                <span>${level}</span>
+                <div class="visual-track">
+                    <div class="visual-fill" style="width:${count / max * 100}%;background:${colors[level]}"></div>
+                </div>
+                <strong>${count}</strong>
+            </div>
+        `).join("");
+}
+
+function flattenWarehouseProducts(data) {
+    const rows = [];
+    Object.entries(data || {}).forEach(([warehouseId, warehouse]) => {
+        Object.entries(warehouse?.products || {}).forEach(([productId, product]) => {
+            rows.push({ warehouseId, productId, ...product });
+        });
+    });
+    return rows;
+}
+
+function renderStockForecastChart(data) {
+    const rows = flattenWarehouseProducts(data)
+        .sort((a, b) => Number(b.last_updated || 0) - Number(a.last_updated || 0))
+        .slice(0, 10);
+    const max = Math.max(
+        1,
+        ...rows.flatMap(item => [
+            Number(item.stock || 0),
+            Number(item.future_demand || 0)
+        ])
+    );
+    document.getElementById("stockForecastChart").innerHTML = rows.length
+        ? rows.map(item => `
+            <div>
+                <div style="font-size:12px;font-weight:700;margin-bottom:3px">${item.warehouseId} / ${item.productId}</div>
+                <div class="visual-row">
+                    <span>Tồn kho</span><div class="visual-track"><div class="visual-fill" style="width:${Number(item.stock || 0) / max * 100}%"></div></div><strong>${item.stock || 0}</strong>
+                </div>
+                <div class="visual-row">
+                    <span>Dự báo RF</span><div class="visual-track"><div class="visual-fill demand" style="width:${Number(item.future_demand || 0) / max * 100}%"></div></div><strong>${item.future_demand || 0}</strong>
+                </div>
+            </div>
+        `).join("")
+        : '<div>Chưa có dữ liệu sản phẩm.</div>';
+}
+
+function renderLatestRealtimeLog(orders) {
+    const latest = [...orders].sort(
+        (a, b) => Number(b.last_updated || 0) - Number(a.last_updated || 0)
+    )[0];
+    if (!latest?.processing_logs) return;
+    const container = document.getElementById("realtimeLog");
+    container.innerHTML = "";
+    latest.processing_logs.forEach(item => {
+        const line = document.createElement("div");
+        line.className = "log-line";
+        line.textContent = `${item.time || "--:--:--"} - ${item.message || ""}`;
+        container.appendChild(line);
+    });
+    if (latest.server_completed_at_ms) {
+        const latency = Math.max(
+            0,
+            Date.now() - Number(latest.server_completed_at_ms)
+        );
+        const line = document.createElement("div");
+        line.className = "log-line";
+        line.textContent =
+            `${new Date().toLocaleTimeString("vi-VN")} - Firebase onValue nhận dữ liệu (${latency} ms)`;
+        container.appendChild(line);
     }
+}
+
+function renderWarehouseInventory(data) {
+    const tableBody = document.getElementById("warehouseTableBody");
+    const rows = flattenWarehouseProducts(data);
+
+    rows.sort((a, b) =>
+        Number(b.last_updated || 0) - Number(a.last_updated || 0)
+    );
+
+    tableBody.innerHTML = rows.length
+        ? rows.map(item => `
+            <tr>
+                <td>${item.warehouseId}</td>
+                <td>${item.productId}</td>
+                <td><strong>${item.stock ?? 0}</strong></td>
+                <td>${item.future_demand ?? '-'}</td>
+                <td>
+                    <span class="level-badge level-${item.inventory_level || 'NORMAL'}">
+                        ${item.inventory_level || 'CHƯA ĐÁNH GIÁ'}
+                    </span>
+                </td>
+                <td>${item.reorder_point ?? '-'}</td>
+                <td>${item.reorder_quantity ?? 0}</td>
+                <td>${item.last_updated_text || '-'}</td>
+            </tr>
+        `).join("")
+        : '<tr><td colspan="8">Chưa có dữ liệu tồn kho.</td></tr>';
 }
 
 function isWarningOrder(order) {
@@ -544,6 +1129,8 @@ function detectNewAlerts(data) {
         return;
     }
 
+    if (!stockAlertsEnabled) return;
+
     warningOrders.forEach(order => {
         const key = alertKey(order);
         if (knownAlerts.has(key)) return;
@@ -569,52 +1156,113 @@ function showAlertToast(order) {
 }
 
 function renderNotifications(orders, toTimestamp) {
-    const alerts = orders
+    const alerts = stockAlertsEnabled ? orders
         .filter(isWarningOrder)
         .sort((a, b) =>
             toTimestamp(b.last_updated || b.timestamp) -
             toTimestamp(a.last_updated || a.timestamp)
-        );
+        ) : [];
 
+    currentNotificationAlerts = alerts;
+    const unreadCount = alerts.filter(order =>
+        !readNotificationKeys.has(alertKey(order))
+    ).length;
     document.getElementById("pushNotificationBadge").textContent =
-        alerts.length > 99 ? "99+" : alerts.length;
+        unreadCount > 99 ? "99+" : unreadCount;
     document.getElementById("pushNotificationIcon").classList.toggle(
         "push-active",
-        alerts.length > 0
+        unreadCount > 0
     );
     renderPushDropdown(alerts);
 }
 
+function saveReadNotificationKeys() {
+    localStorage.setItem(
+        "readNotificationKeys",
+        JSON.stringify(Array.from(readNotificationKeys).slice(-500))
+    );
+}
+
+function markNotificationRead(key) {
+    if (!key) return;
+    readNotificationKeys.add(key);
+    saveReadNotificationKeys();
+}
+
+function notificationTime(order) {
+    let value = Number(order.last_updated || order.timestamp || 0);
+    if (!value) return order.last_updated_text || "Không rõ thời gian";
+    if (value < 1000000000000) value *= 1000;
+    const diffSeconds = Math.max(0, Math.floor((Date.now() - value) / 1000));
+    if (diffSeconds < 60) return "Vừa xong";
+    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} phút trước`;
+    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} giờ trước`;
+    return new Date(value).toLocaleString("vi-VN");
+}
+
 function renderPushDropdown(alerts) {
     const dropdownList = document.getElementById("pushDropdownList");
-    if (!alerts.length) {
-        dropdownList.innerHTML = '<div class="push-empty">Chưa có thông báo mới.</div>';
+    const filteredAlerts = alerts.filter(order => {
+        const level = order.inventory_level || "NORMAL";
+        if (pushNotificationFilter === "ALL") return true;
+        if (pushNotificationFilter === "READ") {
+            return readNotificationKeys.has(alertKey(order));
+        }
+        return level === pushNotificationFilter;
+    });
+
+    if (!filteredAlerts.length) {
+        dropdownList.innerHTML = '<div class="push-empty">Không có thông báo phù hợp.</div>';
         return;
     }
 
-    dropdownList.innerHTML = alerts.slice(0, 6).map(order => {
+    dropdownList.innerHTML = filteredAlerts.slice(0, 15).map(order => {
         const level = order.inventory_level || "NORMAL";
+        const key = alertKey(order);
+        const isUnread = !readNotificationKeys.has(key);
         const title = level === "OUT_OF_STOCK"
-            ? "SẢN PHẨM ĐÃ HẾT HÀNG"
+            ? "⚫ SẢN PHẨM ĐÃ HẾT HÀNG"
             : level === "CRITICAL"
-                ? "CẢNH BÁO TỒN KHO NGUY CẤP"
+                ? "🔴 CẢNH BÁO TỒN KHO NGUY CẤP"
                 : level === "LOW"
-                    ? "SẢN PHẨM SẮP HẾT HÀNG"
-                    : "CẦN BỔ SUNG TỒN KHO";
+                    ? "🟡 SẢN PHẨM SẮP HẾT HÀNG"
+                    : "🟢 TỒN KHO BÌNH THƯỜNG";
         return `
-            <div class="push-dropdown-item">
+            <div class="push-dropdown-item level-${level} ${isUnread ? "unread" : ""}"
+               href="#alertsSection"
+               data-order-id="${order.order_id || ""}"
+               data-notification-key="${key}">
+                ${isUnread ? '<span class="push-unread-dot"></span>' : ""}
                 <div class="push-dropdown-icon">S</div>
                 <div>
-                    <strong>${title}</strong>
+                    <div class="push-title-row">
+                        <strong>${title}</strong>
+                        <span class="push-level-badge">${level.replaceAll("_", " ")}</span>
+                    </div>
                     <p>
-                        Mã ${order.order_id || "N/A"} · Kho ${order.warehouse_id || "N/A"} ·
-                        Tồn ${order.inventory ?? 0} · Dự báo ${order.future_demand ?? 0}.
-                        Cần nhập ${order.reorder_quantity ?? 0} sản phẩm.
+                        Mã: ${order.order_id || "N/A"} | Kho: ${order.warehouse_id || "N/A"}<br>
+                        Tồn: ${order.inventory ?? 0} | Dự báo RF: ${order.future_demand ?? 0} |
+                        Cần nhập: ${order.reorder_quantity ?? 0}
                     </p>
+                    <span class="push-notification-time">${notificationTime(order)}</span>
+                    <div class="push-item-actions">
+                        <button class="push-item-action" data-action="view">Xem chi tiết</button>
+                        ${isUnread ? '<button class="push-item-action" data-action="mark-read">Đánh dấu đã đọc</button>' : ""}
+                    </div>
                 </div>
             </div>
         `;
     }).join("");
+
+    const unreadCount = alerts.filter(order =>
+        !readNotificationKeys.has(alertKey(order))
+    ).length;
+    document.getElementById("pushNotificationBadge").textContent =
+        unreadCount > 99 ? "99+" : unreadCount;
+    document.getElementById("pushNotificationIcon").classList.toggle(
+        "push-active",
+        unreadCount > 0
+    );
 }
 
 // Nút Tạm Dừng
@@ -630,7 +1278,8 @@ document.getElementById('pauseBtn').addEventListener('click', () => {
     } else {
         btn.textContent = '⏸️ Tạm dừng';
         btn.style.background = '#f59e0b';
-        status.innerHTML = '🟢 Đang đồng bộ realtime qua Server Sync';
+        status.innerHTML = '🟢 Đang đồng bộ trực tiếp qua Firebase onValue';
+        window.applyFirebaseOrders(latestFirebaseOrders);
     }
 });
 
@@ -681,10 +1330,9 @@ function renderDashboard(data) {
         ? currentWarehouse
         : "";
 
-    const query = document.getElementById("searchInput")
-        .value.trim().toLowerCase();
-    const selectedWarehouse = warehouseFilter.value;
-    const selectedLevel = document.getElementById("levelFilter").value;
+    const query = appliedInventoryFilters.query;
+    const selectedWarehouse = appliedInventoryFilters.warehouse;
+    const selectedLevel = appliedInventoryFilters.level;
 
     const filteredOrders = allOrders.filter(order => {
         const searchable = [
@@ -772,6 +1420,7 @@ else if (
                 <td>${o.status || '-'}</td>
                 <td>${o.warehouse_id || '-'}</td>
                 <td>${o.order_quantity ?? 0}</td>
+                <td>${o.inventory_before ?? '-'}</td>
                 <td>${o.inventory ?? 0}</td>
                 <td>${o.future_demand ?? 0}</td>
                 <td>
@@ -830,6 +1479,147 @@ function getReplenishmentLabel(level) {
     return labels[level] || "N/A";
 }
 
+function showOrderResult(order) {
+    document.getElementById("resultBefore").textContent =
+        order.inventory_before ?? "-";
+    document.getElementById("resultQuantity").textContent =
+        order.order_quantity ?? "-";
+    document.getElementById("resultDemand").textContent =
+        order.future_demand ?? "-";
+    document.getElementById("resultAfter").textContent =
+        order.inventory ?? "-";
+    document.getElementById("resultRop").textContent =
+        order.reorder_point ?? "-";
+    document.getElementById("resultReorder").textContent =
+        order.reorder_quantity ?? "-";
+    document.getElementById("resultLevel").textContent =
+        order.inventory_level ?? "-";
+    document.getElementById("resultAlert").textContent =
+        order.alert ?? "-";
+}
+
+function showFormLogs(logs) {
+    const container = document.getElementById("realtimeLog");
+    container.innerHTML = "";
+    (logs || []).forEach(item => {
+        const line = document.createElement("div");
+        line.className = "log-line";
+        line.textContent = `${item.time || "--:--:--"} - ${item.message || ""}`;
+        container.appendChild(line);
+    });
+}
+
+document.getElementById("formOrderDate").value =
+    new Date().toISOString().slice(0, 10);
+
+document.getElementById("newOrderForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = document.getElementById("submitOrderBtn");
+    const message = document.getElementById("formMessage");
+    button.disabled = true;
+    message.className = "form-message";
+    message.textContent = "Đang chạy dự báo và xử lý tồn kho...";
+
+    const payload = {
+        order_id: document.getElementById("formOrderId").value.trim(),
+        product_id: document.getElementById("formProductId").value.trim(),
+        warehouse_id: document.getElementById("formWarehouseId").value.trim(),
+        order_quantity: document.getElementById("formOrderQuantity").value,
+        lead_time: document.getElementById("formLeadTime").value,
+        order_date: document.getElementById("formOrderDate").value,
+        daily_sales: document.getElementById("formDailySales").value,
+        initial_stock: document.getElementById("formInitialStock").value
+    };
+
+    try {
+        const response = await fetch("/api/orders/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+            const details = result.errors
+                ? Object.values(result.errors).join(" ")
+                : result.error || "Không thể xử lý đơn hàng.";
+            throw new Error(details);
+        }
+        showOrderResult(result.order);
+        showFormLogs(result.logs);
+        message.className = result.order.fallback_used
+            ? "form-message error"
+            : "form-message success";
+        message.textContent = result.order.fallback_used
+            ? `Đã xử lý ${result.order.order_id} bằng FALLBACK: ${result.order.prediction_error || "model không khả dụng"}.`
+            : `Đã xử lý ${result.order.order_id} bằng ${result.order.model_mode} (${result.order.model_version}); Dashboard nhận qua onValue.`;
+    } catch (error) {
+        message.className = "form-message error";
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+});
+
+document.getElementById("addProductForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = document.getElementById("addProductBtn");
+    const message = document.getElementById("addProductMessage");
+    button.disabled = true;
+    message.className = "form-message";
+    message.textContent = "Đang thêm sản phẩm vào Firebase...";
+
+    try {
+        const response = await fetch("/api/products", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                warehouse_id:
+                    document.getElementById("newProductWarehouse").value.trim(),
+                product_id:
+                    document.getElementById("newProductId").value.trim(),
+                stock:
+                    document.getElementById("newProductStock").value
+            })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+            const details = result.errors
+                ? Object.values(result.errors).join(" ")
+                : result.error || "Không thể thêm sản phẩm.";
+            throw new Error(details);
+        }
+        message.className = "form-message success";
+        message.textContent =
+            `Đã thêm ${result.product.product_id} vào ${result.product.warehouse_id}; onValue đã đồng bộ.`;
+    } catch (error) {
+        message.className = "form-message error";
+        message.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
+});
+
+fetch("/api/model-info")
+    .then(response => response.json())
+    .then(info => {
+        document.getElementById("metricMae").textContent =
+            Number(info.mae).toFixed(2);
+        document.getElementById("metricRmse").textContent =
+            Number(info.rmse).toFixed(2);
+        document.getElementById("metricR2").textContent =
+            Number(info.r2).toFixed(4);
+        document.getElementById("modelLoadStatus").textContent = info.loaded
+            ? `${info.name} + ${info.encoding} đã tải thành công`
+            : "Model chưa tải được - đang dùng fallback";
+        document.getElementById("modelLoadStatus").className = info.loaded
+            ? "firebase-connected"
+            : "firebase-error";
+    })
+    .catch(() => {
+        document.getElementById("modelLoadStatus").textContent =
+            "Không đọc được trạng thái model";
+    });
+
 function resetInventoryFilters() {
     document.getElementById("searchInput").value = "";
     document.getElementById("warehouseFilter").value = "";
@@ -840,8 +1630,39 @@ function resetInventoryFilters() {
     scheduleRender();
 }
 
-syncOrdersFromServer();
-setInterval(syncOrdersFromServer, 1000);
+</script>
+<script type="module">
+import { initializeApp } from
+    "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getDatabase, ref, onValue } from
+    "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDiqqYce7nQDsFjr8Rhdtp8pRAUz3a_ZSM",
+    authDomain: "smart-log-70043.firebaseapp.com",
+    databaseURL:
+        "https://smart-log-70043-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "smart-log-70043",
+    storageBucket: "smart-log-70043.firebasestorage.app",
+    messagingSenderId: "593576704366",
+    appId: "1:593576704366:web:320dc14398c704a0b4a97f",
+    measurementId: "G-8G74H6E5B1"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const firebaseDatabase = getDatabase(firebaseApp);
+
+onValue(
+    ref(firebaseDatabase, "orders"),
+    snapshot => window.applyFirebaseOrders(snapshot.val() || {}),
+    error => window.handleFirebaseError(error)
+);
+
+onValue(
+    ref(firebaseDatabase, "warehouses"),
+    snapshot => window.applyFirebaseWarehouses(snapshot.val() || {}),
+    error => window.handleFirebaseError(error)
+);
 </script>
 </body>
 </html>

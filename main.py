@@ -9,16 +9,17 @@ import socketio
 from predictor import predict_demand
 
 from inventory_manager import (
-    check_inventory,
-    update_inventory,
-    add_stock,
-    get_stock,
-    set_stock
+    evaluate_inventory
 )
 
 from firebase_manager import (
     update_order_status,
-    clear_orders
+    get_order,
+    get_product_stock,
+    set_product_stock,
+    deduct_product_stock,
+    add_product_stock,
+    update_product_inventory_analysis
 )
 
 # ==========================================
@@ -82,25 +83,6 @@ def main():
     print("=" * 60)
     print("SMART LOGISTICS SYSTEM STARTED")
     print("=" * 60)
-
-    # ======================================
-    # FIREBASE RESET
-    # ======================================
-
-    try:
-
-        clear_orders()
-
-        print(
-            "[SYSTEM] Firebase cleared"
-        )
-
-    except Exception as e:
-
-        print(
-            "[FIREBASE RESET ERROR]",
-            e
-        )
 
     # ======================================
     # SOCKET
@@ -301,28 +283,36 @@ def main():
             # INVENTORY UPDATE
             # ==================================
 
+            insufficient_stock = False
+
             try:
 
-                # Initialize this simulation event from the Kaggle-derived
-                # inventory value before applying outbound/inbound movements.
-                set_stock(
+                current_stock = get_product_stock(
                     warehouse_id,
-                    inventory_qty
+                    product_id
                 )
 
-                update_inventory(
+                if current_stock is None:
+                    current_stock = set_product_stock(
+                        warehouse_id,
+                        product_id,
+                        inventory_qty
+                    )
+
+                inventory_before = current_stock
+
+                inventory_qty = deduct_product_stock(
                     warehouse_id,
+                    product_id,
                     order_qty
                 )
 
-                add_stock(
-                    warehouse_id,
-                    incoming_stock
-                )
-
-                inventory_qty = get_stock(
-                    warehouse_id
-                )
+                if incoming_stock > 0:
+                    inventory_qty = add_product_stock(
+                        warehouse_id,
+                        product_id,
+                        incoming_stock
+                    )
 
             except Exception as e:
 
@@ -331,7 +321,14 @@ def main():
                     e
                 )
 
-                inventory_qty = 0
+                insufficient_stock = True
+                inventory_before = (
+                    get_product_stock(
+                        warehouse_id,
+                        product_id
+                    ) or 0
+                )
+                inventory_qty = inventory_before
 
             # ==================================
             # INVENTORY CHECK
@@ -340,7 +337,8 @@ def main():
             try:
 
                 inventory_report = (
-                    check_inventory(
+                    evaluate_inventory(
+                        stock=inventory_qty,
                         warehouse_id=warehouse_id,
                         future_demand=demand,
                         lead_time=lead_time
@@ -370,6 +368,11 @@ def main():
                 )
             )
 
+            existing_order = get_order(order_id)
+            if isinstance(existing_order, dict) and existing_order.get("processed"):
+                print(f"[SKIPPED] {order_id} was already processed")
+                continue
+
             reorder_point = safe_int(
                 inventory_report.get(
                     "reorder_point",
@@ -396,6 +399,16 @@ def main():
                 )
             )
 
+            update_product_inventory_analysis(
+                warehouse_id=warehouse_id,
+                product_id=product_id,
+                future_demand=demand,
+                inventory_level=inventory_level,
+                reorder_point=reorder_point,
+                reorder_quantity=reorder_quantity,
+                reorder_required=reorder_required
+            )
+
             # ==================================
             # INVENTORY ALERT LOGIC
             # ==================================
@@ -414,11 +427,19 @@ def main():
 
                 alert = "LOW_STOCK"
 
+            if insufficient_stock:
+                alert = "INSUFFICIENT_STOCK"
+                status = "Cancelled"
+
             # ==================================
             # INVENTORY STATUS RULES
             # ==================================
 
-            if inventory_level == "OUT_OF_STOCK":
+            if insufficient_stock:
+
+                status = "Cancelled"
+
+            elif inventory_level == "OUT_OF_STOCK":
 
                 status = "Cancelled"
 
@@ -456,6 +477,7 @@ def main():
                 "progress": progress,
 
                 "inventory": inventory_qty,
+                "inventory_before": inventory_before,
                 "order_quantity": order_qty,
                 "demand": demand,
                 "future_demand": demand,
@@ -504,6 +526,7 @@ def main():
                     reorder_quantity=reorder_quantity,
                     inventory_level_description=inventory_level_description,
                     order_quantity=order_qty,
+                    inventory_before=inventory_before,
 
                     event_id=payload["event_id"]
                 )
