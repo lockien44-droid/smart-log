@@ -2,17 +2,18 @@ import time
 import uuid
 import traceback
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import socketio
 
-from predictor import predict_demand
+from app.ai.predictor import predict_demand
 
-from inventory_manager import (
+from app.inventory_service import (
     evaluate_inventory
 )
 
-from firebase_manager import (
+from app.firebase.repository import (
     update_order_status,
     get_order,
     get_product_stock,
@@ -21,6 +22,8 @@ from firebase_manager import (
     add_product_stock,
     update_product_inventory_analysis
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # ==========================================
 # SAFE FUNCTIONS
@@ -122,7 +125,7 @@ def main():
     try:
 
         df = pd.read_csv(
-            "data/processed/smart_logistics_runtime.csv"
+            PROJECT_ROOT / "data" / "processed" / "smart_logistics_runtime.csv"
         )
 
         df.fillna(

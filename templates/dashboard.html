@@ -6,322 +6,93 @@
     <title>Smart Logistics Dashboard</title>
 
     
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-        .logo { font-size: 26px; font-weight: bold; color: #38bdf8; }
-        button { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-        #pauseBtn { background: #f59e0b; color: white; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .stat-card { background: #1e293b; padding: 16px; border-radius: 10px; text-align: center; }
-        .stat-card h2 { font-size: 28px; color: #38bdf8; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 15px; }
-        .panel { background: #1e293b; border-radius: 12px; padding: 16px; }
-        .chart-container { position: relative; height: 240px; width: 100%; }
-        .mini-chart { height: 240px; overflow: auto; padding: 8px 4px; }
-        .bar-row { display: grid; grid-template-columns: 120px 1fr 60px; gap: 10px; align-items: center; margin: 10px 0; font-size: 0.9rem; }
-        .bar-label { color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .bar-track { background: #334155; border-radius: 999px; height: 16px; overflow: hidden; }
-        .bar-fill { height: 100%; border-radius: 999px; min-width: 2px; }
-        .bar-value { color: #cbd5e1; text-align: right; }
-        .dual-row { margin: 12px 0; }
-        .dual-title { color: #e2e8f0; font-size: 0.85rem; margin-bottom: 4px; }
-        .legend { display:flex; gap:16px; margin: 6px 0 10px; font-size: 0.85rem; color:#cbd5e1; }
-        .legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; }
-        .legend .inv::before { background:#22c55e; }
-        .legend .demand::before { background:#f59e0b; }
-        .card { background: #1e293b; border-radius: 10px; padding: 14px; border-left: 5px solid #22c55e; margin-bottom: 10px; font-size: 0.95rem; }
-        .low { border-left-color: #ef4444; }
-        .warning { border-left-color: #f59e0b; }
-        .notification-panel { margin-bottom: 15px; border: 1px solid #475569; }
-        .notification-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
-        .notification-count { background:#ef4444; color:white; padding:3px 9px; border-radius:999px; font-size:0.85rem; }
-        .notification-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:8px; max-height:190px; overflow:auto; }
-        .notification-item { background:#0f172a; border-left:4px solid #f59e0b; border-radius:7px; padding:10px; }
-        .notification-item.critical { border-left-color:#ef4444; }
-        .notification-item small { color:#94a3b8; }
-        #toastContainer { position:fixed; top:75px; right:18px; z-index:9999; display:flex; flex-direction:column; gap:8px; width:min(380px,calc(100vw - 36px)); }
-        .toast { background:#7f1d1d; color:white; border:1px solid #ef4444; border-radius:9px; padding:12px 14px; box-shadow:0 10px 30px rgba(0,0,0,.35); animation:toast-in .25s ease-out; }
-        @keyframes toast-in { from { transform:translateX(30px); opacity:0; } to { transform:translateX(0); opacity:1; } }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #334155; }
-        th { background: #334155; }
-        body { background:#f6f7fb; color:#1f2937; padding:0; }
-        .app-shell { min-height:100vh; display:grid; grid-template-columns:230px minmax(0,1fr); }
-        .sidebar { background:#fff; border-right:1px solid #e5e7eb; padding:22px 14px; position:sticky; top:0; height:100vh; }
-        .brand { color:#ee4d2d; font-weight:800; font-size:21px; padding:0 10px 22px; }
-        .brand small { display:block; color:#9ca3af; font-size:11px; font-weight:500; margin-top:4px; }
-        .nav-title { color:#9ca3af; font-size:11px; text-transform:uppercase; letter-spacing:.08em; padding:15px 12px 7px; }
-        .nav-item { display:flex; gap:10px; align-items:center; padding:11px 12px; margin:3px 0; border-radius:8px; color:#4b5563; cursor:pointer; }
-        .nav-item.active { color:#ee4d2d; background:#fff1ed; font-weight:700; }
-        .menu-group { margin:5px 0; }
-        .menu-parent { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; color:#6b7280; font-size:13px; font-weight:700; border-radius:8px; cursor:pointer; }
-        .menu-parent:hover, .menu-parent.active { color:#ee4d2d; background:#fff1ed; }
-        .menu-parent-left { display:flex; align-items:center; gap:9px; }
-        .menu-parent .chevron { color:#9ca3af; font-size:13px; }
-        .submenu { margin:0 0 8px 27px; display:flex; flex-direction:column; gap:2px; }
-        .submenu.collapsed { display:none; }
-        .submenu .nav-item { padding:6px 10px; margin:0; font-size:13px; border-radius:6px; }
-        .submenu .nav-item.active { background:transparent; color:#ee4d2d; font-weight:800; }
-        .menu-dot { width:6px; height:6px; border-radius:50%; background:#ee4d2d; display:inline-block; margin-left:3px; }
-        .sidebar > .menu-group:nth-child(n+9) { display:none; }
-        .view-hidden { display:none !important; }
-        .main-content { min-width:0; padding:0 24px 30px; }
-        .topbar { height:48px; margin:0 -24px 20px; padding:0 24px; background:#fff; border-bottom:1px solid #e5e7eb; display:flex; align-items:center; justify-content:space-between; box-shadow:0 1px 3px rgba(0,0,0,.04); position:sticky; top:0; z-index:30; }
-        .breadcrumb { display:flex; align-items:center; gap:10px; color:#9ca3af; font-size:14px; }
-        .breadcrumb-logo { width:24px; height:24px; border-radius:5px; background:#ee4d2d; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-weight:800; }
-        .breadcrumb-current { color:#374151; font-weight:700; }
-        .topbar-actions { display:flex; align-items:center; gap:18px; color:#6b7280; }
-        .topbar-icon { position:relative; width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:#fff; color:#6b7280; border:1px solid transparent; }
-        .topbar-icon:hover { background:#fff1ed; color:#ee4d2d; }
-        .topbar-icon.push-active { color:#ee4d2d; animation:bell-shake 1.15s ease-in-out infinite; }
-        .push-badge { position:absolute; top:-7px; right:-8px; min-width:19px; height:19px; padding:0 5px; border-radius:999px; background:#ee4d2d; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; border:2px solid #fff; }
-        .topbar-brand-pill { border:1px solid #e5e7eb; border-radius:999px; padding:7px 13px; color:#6b7280; font-size:12px; font-weight:700; background:#fff; }
-        .push-wrapper { position:relative; }
-        .push-dropdown { position:absolute; top:38px; right:-120px; width:min(520px,calc(100vw - 40px)); background:#fff; border:1px solid #e5e7eb; box-shadow:0 8px 28px rgba(15,23,42,.18); display:none; z-index:80; }
-        .push-wrapper.open .push-dropdown { display:block; }
-        .push-dropdown-title { padding:14px 18px 10px; color:#6b7280; font-size:18px; border-bottom:1px solid #f3f4f6; }
-        .push-filter-tabs { display:flex; gap:6px; padding:8px 12px; overflow:auto; border-bottom:1px solid #f3f4f6; background:#fff; }
-        .push-filter-tab { border:0; background:#f3f4f6; color:#6b7280; padding:6px 9px; border-radius:999px; font-size:11px; white-space:nowrap; }
-        .push-filter-tab.active { background:#ee4d2d; color:#fff; }
-        .push-dropdown-list { max-height:470px; overflow:auto; background:#fff7f4; }
-        .push-dropdown-item { position:relative; display:grid; grid-template-columns:48px 1fr; gap:11px; padding:12px 14px; border-bottom:1px solid #e5e7eb; border-left:5px solid #9ca3af; color:#374151; cursor:pointer; text-decoration:none; background:#fff; }
-        .push-dropdown-item:hover { background:#fff1ed; }
-        .alert-row-highlight { background:#fff1ed !important; outline:2px solid #ee4d2d; outline-offset:-2px; }
-        .push-dropdown-item.unread { background:#fff8f5; }
-        .push-dropdown-item.level-NORMAL { border-left-color:#22c55e; }
-        .push-dropdown-item.level-LOW { border-left-color:#eab308; }
-        .push-dropdown-item.level-CRITICAL { border-left-color:#f97316; }
-        .push-dropdown-item.level-OUT_OF_STOCK { border-left-color:#dc2626; }
-        .push-unread-dot { position:absolute; top:12px; right:10px; width:7px; height:7px; border-radius:50%; background:#ee4d2d; }
-        .push-dropdown-icon { width:42px; height:42px; border-radius:8px; background:#22c55e; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:800; }
-        .level-LOW .push-dropdown-icon { background:#eab308; }
-        .level-CRITICAL .push-dropdown-icon { background:#f97316; }
-        .level-OUT_OF_STOCK .push-dropdown-icon { background:#dc2626; }
-        .push-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding-right:10px; }
-        .push-level-badge { padding:3px 7px; border-radius:999px; background:#f3f4f6; font-size:10px; font-weight:800; white-space:nowrap; }
-        .push-dropdown-item strong { display:block; color:#111827; margin-bottom:4px; font-size:15px; }
-        .push-dropdown-item p { margin:0; color:#6b7280; line-height:1.35; font-size:13px; }
-        .push-notification-time { display:block; margin-top:5px; color:#9ca3af; font-size:11px; }
-        .push-item-actions { display:flex; gap:12px; margin-top:7px; }
-        .push-item-action { border:0; background:transparent; color:#ee4d2d; padding:0; font-size:11px; font-weight:700; }
-        .push-dropdown-footer { display:flex; justify-content:space-between; align-items:center; padding:12px 15px; color:#374151; background:#fff; border-top:1px solid #f3f4f6; }
-        .push-footer-action { border:0; background:transparent; color:#6b7280; padding:0; font-size:12px; }
-        .push-footer-view { color:#ee4d2d; font-weight:700; }
-        .push-empty { padding:24px; text-align:center; color:#9ca3af; background:#fff; }
-        @keyframes bell-shake {
-            0%, 100% { transform:rotate(0); }
-            10%, 30%, 50% { transform:rotate(-12deg); }
-            20%, 40%, 60% { transform:rotate(12deg); }
-            70% { transform:rotate(0); }
-        }
-        .header { background:#fff; margin:0 -24px 20px; padding:16px 24px; border-bottom:1px solid #e5e7eb; position:sticky; top:0; z-index:20; }
-        .logo { color:#111827; font-size:21px; }
-        .page-subtitle { color:#6b7280; font-size:13px; margin-top:4px; }
-        #pauseBtn { background:#ee4d2d; }
-        .stat-card, .panel { background:#fff; border:1px solid #e5e7eb; box-shadow:0 1px 2px rgba(0,0,0,.03); }
-        .stat-card { text-align:left; position:relative; overflow:hidden; }
-        .stat-card::after { content:""; position:absolute; right:-18px; top:-18px; width:72px; height:72px; border-radius:50%; background:#fff1ed; }
-        .stat-card h2 { color:#ee4d2d; }
-        .stat-card p { color:#6b7280; margin-top:4px; }
-        .panel h3 { color:#111827; }
-        .grid { margin-bottom:15px; }
-        .chart-container, .mini-chart { height:255px; }
-        .bar-label, .dual-title { color:#374151; }
-        .bar-track { background:#e5e7eb; }
-        .bar-value, .legend { color:#6b7280; }
-        .notification-panel { border-color:#fed7aa; background:#fffaf5; }
-        .notification-list { grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
-        .notification-item { background:#fff; color:#374151; border:1px solid #ffedd5; border-left:4px solid #f59e0b; }
-        .notification-item small { color:#6b7280; }
-        .filter-panel { display:grid; grid-template-columns:minmax(220px,2fr) repeat(2,minmax(150px,1fr)); gap:12px; margin-bottom:15px; }
-        .inventory-tabs { display:flex; gap:4px; border-bottom:1px solid #e5e7eb; margin:-2px 0 15px; overflow:auto; }
-        .inventory-tab { appearance:none; background:transparent; color:#6b7280; border-radius:0; padding:12px 16px; border-bottom:2px solid transparent; white-space:nowrap; }
-        .inventory-tab.active { color:#ee4d2d; border-bottom-color:#ee4d2d; }
-        .tab-count { display:inline-block; margin-left:5px; padding:1px 7px; background:#f3f4f6; border-radius:999px; font-size:11px; }
-        .replenish-badge { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; }
-        .replenish-NORMAL { color:#15803d; }
-        .replenish-LOW { color:#a16207; }
-        .replenish-CRITICAL, .replenish-OUT_OF_STOCK { color:#dc2626; }
-        .filter-control { width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:7px; background:#fff; color:#374151; outline:none; }
-        .filter-control:focus { border-color:#ee4d2d; box-shadow:0 0 0 3px rgba(238,77,45,.1); }
-        .table-wrap { overflow:auto; }
-        table { min-width:1100px; }
-        th { background:#f9fafb; color:#6b7280; font-size:12px; text-transform:uppercase; letter-spacing:.03em; border-bottom:1px solid #e5e7eb; }
-        td { border-bottom:1px solid #f0f1f3; color:#374151; }
-        tbody tr:hover { background:#fff8f5; }
-        .card { background:#fff; color:#374151; border:1px solid #e5e7eb; }
-        .level-badge { display:inline-block; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:700; }
-        .level-NORMAL { background:#dcfce7; color:#15803d; }
-        .level-LOW { background:#fef3c7; color:#a16207; }
-        .level-CRITICAL { background:#ffedd5; color:#c2410c; }
-        .level-OUT_OF_STOCK { background:#fee2e2; color:#b91c1c; }
-        .section-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:13px; }
-        .section-heading span { color:#9ca3af; font-size:13px; }
-        .overview-panel { margin-bottom:15px; padding-bottom:4px; }
-        .overview-meta { display:flex; flex-wrap:wrap; gap:16px; color:#6b7280; font-size:12px; }
-        .overview-meta strong { color:#374151; }
-        .overview-panel .stats { margin:14px 0 10px; }
-        .inventory-manage-card { margin-bottom:15px; padding:0; overflow:hidden; }
-        .inventory-manage-header { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:18px 20px; border-bottom:1px solid #e5e7eb; }
-        .inventory-manage-title h3 { font-size:21px; color:#111827; margin-bottom:3px; }
-        .inventory-manage-title span { color:#6b7280; font-size:13px; }
-        .inventory-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
-        .toggle-label { display:flex; align-items:center; gap:8px; color:#4b5563; font-size:13px; white-space:nowrap; }
-        .toggle-switch { width:42px; height:22px; background:#22c55e; border-radius:999px; position:relative; display:inline-block; }
-        .toggle-switch::after { content:""; position:absolute; top:3px; right:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.2); }
-        .toggle-label { cursor:pointer; user-select:none; }
-        .toggle-switch.off { background:#cbd5e1; }
-        .toggle-switch.off::after { right:23px; }
-        .action-btn { background:#fff; color:#374151; border:1px solid #e5e7eb; border-radius:6px; padding:9px 13px; font-weight:600; }
-        .action-btn.primary { background:#ee4d2d; color:#fff; border-color:#ee4d2d; }
-        .inventory-tabs.shopee-tabs { padding:0 20px; margin:0; }
-        .inventory-filter-box { padding:18px 20px; border-bottom:1px solid #e5e7eb; }
-        .filter-grid { display:grid; grid-template-columns:1.1fr 1fr; gap:14px 70px; align-items:center; margin-bottom:14px; }
-        .filter-inline { display:grid; grid-template-columns:170px 1fr; gap:10px; align-items:center; }
-        .filter-inline label { color:#4b5563; font-size:13px; }
-        .range-inputs { display:grid; grid-template-columns:1fr 20px 1fr; gap:8px; align-items:center; }
-        .filter-buttons { display:flex; gap:10px; }
-        .filter-buttons .primary { background:#ee4d2d; color:#fff; }
-        .filter-buttons .secondary { background:#fff; color:#374151; border:1px solid #e5e7eb; }
-        .inventory-note { margin:14px 20px; border:1px solid #93c5fd; background:#eff6ff; color:#475569; padding:10px 13px; border-radius:4px; font-size:13px; }
-        .inventory-manage-card > .section-heading { display:none; }
-        .inventory-manage-card > .inventory-tabs { padding:0 20px; margin:0; }
-        .inventory-manage-card > .filter-panel { grid-template-columns:minmax(260px,1.5fr) minmax(220px,1fr) minmax(220px,1fr); padding:18px 20px; margin:0; border-bottom:1px solid #e5e7eb; }
-        .inventory-manage-card > .table-wrap { padding:0 20px 20px; }
-        #inventoryView { display:flex; flex-direction:column; }
-        .notification-panel { order:1; }
-        #inventoryView > .grid { order:2; }
-        .inventory-manage-card { order:3; }
-        .demo-grid { display:grid; grid-template-columns:1.15fr .85fr; gap:15px; margin-bottom:15px; }
-        .order-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
-        .form-group { display:flex; flex-direction:column; gap:5px; }
-        .form-group label { color:#4b5563; font-size:12px; font-weight:700; }
-        .form-group input { padding:10px 11px; border:1px solid #d1d5db; border-radius:7px; outline:none; }
-        .form-group input:focus { border-color:#ee4d2d; box-shadow:0 0 0 3px rgba(238,77,45,.1); }
-        .form-actions { grid-column:1/-1; display:flex; align-items:center; gap:12px; }
-        .form-actions button { background:#ee4d2d; color:#fff; }
-        .form-message { font-size:13px; color:#6b7280; }
-        .form-message.error { color:#dc2626; }
-        .form-message.success { color:#15803d; }
-        .prediction-result { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
-        .result-box { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:11px; }
-        .result-box span { display:block; color:#6b7280; font-size:11px; margin-bottom:4px; }
-        .result-box strong { color:#111827; font-size:18px; }
-        .metric-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
-        .metric-item { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:10px; text-align:center; }
-        .metric-item span { display:block; color:#6b7280; font-size:11px; }
-        .metric-item strong { color:#ee4d2d; font-size:17px; }
-        .realtime-log { max-height:220px; overflow:auto; background:#111827; color:#d1fae5; border-radius:8px; padding:12px; font:12px Consolas,monospace; }
-        .log-line { padding:4px 0; border-bottom:1px solid #1f2937; }
-        .visual-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px; }
-        .visual-bars { display:flex; flex-direction:column; gap:9px; max-height:240px; overflow:auto; }
-        .visual-row { display:grid; grid-template-columns:105px 1fr 50px; align-items:center; gap:8px; font-size:12px; }
-        .visual-track { height:13px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
-        .visual-fill { height:100%; background:#22c55e; border-radius:999px; }
-        .visual-fill.demand { background:#f59e0b; }
-        .firebase-connected { color:#16a34a !important; }
-        .firebase-error { color:#dc2626 !important; }
-        .feature-hidden { display:none !important; }
-        @media (max-width:900px) {
-            .app-shell { grid-template-columns:1fr; }
-            .sidebar { display:none; }
-            .main-content { padding:0 12px 24px; }
-            .topbar { margin:0 -12px 15px; padding:0 12px; }
-            .header { margin:0 -12px 15px; padding:14px 12px; }
-            .filter-panel { grid-template-columns:1fr; }
-            .demo-grid, .visual-grid { grid-template-columns:1fr; }
-            .order-form { grid-template-columns:1fr; }
-            .metric-grid { grid-template-columns:repeat(2,1fr); }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 </head>
 <body>
 
 <div class="app-shell">
     <aside class="sidebar">
         <div class="brand">SMART LOGISTICS<small>Inventory Management</small></div>
-        <div id="dashboardNav" class="nav-item active">🏠 Dashboard tổng quan</div>
+        <div id="dashboardNav" class="nav-item active">Trang chủ</div>
         <div class="menu-group">
             <div id="orderManagementNav" class="menu-parent">
-                <span class="menu-parent-left">▣ Quản lý đơn hàng</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Quản lý đơn hàng</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div id="forecastNav" class="menu-parent">
-                <span class="menu-parent-left">🤖 Dự báo nhu cầu</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Dự báo nhu cầu</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div id="productMenuToggle" class="menu-parent">
-                <span class="menu-parent-left">▧ Quản Lý Sản Phẩm</span>
-                <span class="chevron">⌃</span>
+                <span class="menu-parent-left">Quản Lý Sản Phẩm</span>
+                <span class="chevron"></span>
             </div>
             <div id="productSubmenu" class="submenu">
                 <div id="allProductsNav" class="nav-item">Tất Cả Sản Phẩm</div>
                 <div id="addProductNav" class="nav-item">Thêm Sản Phẩm</div>
                 <div id="orderDetailsNav" class="nav-item">Chi tiết đơn hàng</div>
                 <div id="inventoryNav" class="nav-item">Quản Lý Tồn Kho</div>
+                <div id="restockNav" class="nav-item">Nhập thêm hàng</div>
             </div>
         </div>
-        <div id="alertNav" class="nav-item">🔔 Cảnh báo tồn kho</div>
-        <div id="historyNav" class="nav-item">🕘 Lịch sử đồng bộ</div>
-        <div id="settingsNav" class="nav-item">⚙ Cài đặt</div>
+        <div id="alertNav" class="nav-item">Cảnh báo tồn kho</div>
+        <div id="historyNav" class="nav-item">Lịch sử đồng bộ</div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">◇ Kênh Marketing</span>
-                <span class="chevron">⌄</span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">♙ Quản lý khách hàng</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Kênh Marketing</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">▣ Tài Chính</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Quản lý khách hàng</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">⌁ Dữ Liệu</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Tài Chính</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">◎ Phát Triển</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Dữ Liệu</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">▱ Chăm sóc khách hàng</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Phát Triển</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">⌂ SBS<span class="menu-dot"></span></span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Chăm sóc khách hàng</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">▱ Quản Lý Shop</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">SBS</span>
+                <span class="chevron"></span>
             </div>
         </div>
         <div class="menu-group">
             <div class="menu-parent">
-                <span class="menu-parent-left">⚙ Thiết Lập Shop</span>
-                <span class="chevron">⌄</span>
+                <span class="menu-parent-left">Quản Lý Shop</span>
+                <span class="chevron"></span>
+            </div>
+        </div>
+        <div class="menu-group">
+            <div class="menu-parent">
+                <span class="menu-parent-left">Thiết Lập Shop</span>
+                <span class="chevron"></span>
             </div>
         </div>
     </aside>
@@ -329,16 +100,14 @@
     <div class="topbar">
         <div class="breadcrumb">
             <span class="breadcrumb-logo">S</span>
-            <span>Trang chủ</span>
-            <span>›</span>
-            <span id="breadcrumbCurrent" class="breadcrumb-current">Dashboard tổng quan</span>
+            <span id="breadcrumbCurrent" class="breadcrumb-current">Trang chủ</span>
         </div>
         <div class="topbar-actions">
             <span class="topbar-icon" title="Trung tâm thông báo">🏪</span>
             <span class="topbar-icon" title="Ứng dụng">▦</span>
             <span id="pushWrapper" class="push-wrapper">
                 <span id="pushNotificationIcon" class="topbar-icon" title="Thông báo đẩy">
-                    🔔
+                    
                     <span id="pushNotificationBadge" class="push-badge">0</span>
                 </span>
                 <div id="pushDropdown" class="push-dropdown">
@@ -369,34 +138,20 @@
 
     <div id="overviewView">
     <div id="overviewSection" class="panel overview-panel">
-        <div class="section-heading">
-            <div>
-                <h3>Tổng quan tồn kho</h3>
-                <span>Nắm nhanh tình trạng hàng hóa trên toàn bộ kho</span>
-            </div>
-            <div class="overview-meta">
-                <span>🔥 Firebase: <strong id="firebaseConnection">Đang kết nối</strong></span>
-                <span>📡 Nodes: <strong>orders + warehouses</strong></span>
-                <span>🔄 Đồng bộ: <strong id="lastSyncTime">--:--:--</strong></span>
-                <span>🕒 Dữ liệu mới nhất: <strong id="latestDataTime">Chưa có</strong></span>
-                <span>⚡ Đồng bộ: <strong>Firebase onValue</strong></span>
-            </div>
-        </div>
         <div class="stats">
-            <div class="stat-card"><h2 id="totalOrders">0</h2><p>Tổng SKU/đơn theo dõi</p></div>
-            <div class="stat-card"><h2 id="normalStock">0</h2><p>Tồn kho bình thường</p></div>
-            <div class="stat-card"><h2 id="lowStock">0</h2><p>Sắp hết hàng</p></div>
-            <div class="stat-card"><h2 id="criticalStock">0</h2><p>Tồn kho nguy cấp</p></div>
-            <div class="stat-card"><h2 id="outOfStock">0</h2><p>Đã hết hàng</p></div>
-            <div class="stat-card"><h2 id="reorderCount">0</h2><p>Cần bổ sung hàng</p></div>
+            <div class="stat-card"><h2 id="pendingOrders">0</h2><p>Pending</p></div>
+            <div class="stat-card"><h2 id="processingOrders">0</h2><p>Processing</p></div>
+            <div class="stat-card"><h2 id="shippingOrders">0</h2><p>Shipping</p></div>
+            <div class="stat-card"><h2 id="deliveredOrders">0</h2><p>Delivered</p></div>
+            <div class="stat-card"><h2 id="cancelledOrders">0</h2><p>Cancelled</p></div>
         </div>
     </div>
 
-    <div id="orderFormSection" class="demo-grid">
+    <div id="orderFormSection" class="demo-grid feature-hidden">
         <div class="panel">
             <div class="section-heading">
                 <h3>Tạo đơn hàng realtime</h3>
-                <span>Random Forest → Firebase → Dashboard</span>
+                <span>Random Forest  Firebase  Dashboard</span>
             </div>
             <form id="newOrderForm" class="order-form">
                 <div class="form-group"><label>Mã đơn hàng</label><input id="formOrderId" required placeholder="DEMO_001"></div>
@@ -421,7 +176,8 @@
             <div class="prediction-result">
                 <div class="result-box"><span>Tồn kho hiện tại</span><strong id="resultBefore">-</strong></div>
                 <div class="result-box"><span>Số lượng đặt</span><strong id="resultQuantity">-</strong></div>
-                <div class="result-box"><span>Nhu cầu dự báo RF</span><strong id="resultDemand">-</strong></div>
+                <div class="result-box"><span>Dự báo nhu cầu 7 ngày</span><strong id="resultDemand7">-</strong></div>
+                <div class="result-box"><span>Dự báo nhu cầu 30 ngày</span><strong id="resultDemand30">-</strong></div>
                 <div class="result-box"><span>Tồn kho sau xử lý</span><strong id="resultAfter">-</strong></div>
                 <div class="result-box"><span>Reorder Point</span><strong id="resultRop">-</strong></div>
                 <div class="result-box"><span>Cần nhập thêm</span><strong id="resultReorder">-</strong></div>
@@ -431,7 +187,7 @@
         </div>
     </div>
 
-    <div id="modelSection" class="panel" style="margin-bottom:15px">
+    <div id="modelSection" class="panel feature-hidden" style="margin-bottom:15px">
         <div class="section-heading">
             <h3>Đánh giá mô hình Random Forest</h3>
             <span id="modelLoadStatus">Đang đọc model...</span>
@@ -445,20 +201,20 @@
         </div>
     </div>
 
-    <div id="chartsSection" class="visual-grid">
+    <div id="chartsSection" class="visual-grid feature-hidden">
         <div class="panel">
-            <div class="section-heading"><h3>Tồn kho so với dự báo</h3><span>10 SKU mới nhất</span></div>
+            <h3>Tồn kho so với dự báo</h3>
             <div id="stockForecastChart" class="visual-bars"></div>
         </div>
         <div class="panel">
-            <div class="section-heading"><h3>Phân bố mức tồn kho</h3><span>Realtime từ orders</span></div>
+            <h3>Phân bố mức tồn kho</h3>
             <div id="stockLevelChart" class="visual-bars"></div>
         </div>
     </div>
 
-    <div id="realtimeLogSection" class="panel" style="margin-bottom:15px">
-        <div class="section-heading"><h3>Nhật ký realtime</h3><span>Chứng minh cập nhật không reload</span></div>
-        <div id="realtimeLog" class="realtime-log"><div class="log-line">Đang chờ đơn hàng mới...</div></div>
+    <div id="realtimeLogSection" class="panel feature-hidden" style="margin-bottom:15px">
+        <h3>Nhật ký realtime</h3>
+        <div id="realtimeLog" class="realtime-log"><div class="log-line">Đang chờ ơn hàng mi...</div></div>
     </div>
 
     <div id="addProductSection" class="panel feature-hidden" style="margin-bottom:15px">
@@ -477,13 +233,37 @@
         </form>
     </div>
 
+    <div id="restockSection" class="panel feature-hidden" style="margin-bottom:15px">
+        <div class="section-heading">
+            <h3>Nhập thêm hàng vào kho</h3>
+            <span>Bổ sung hàng cho SKU đã tồn tại, cập nhật Firebase realtime</span>
+        </div>
+        <form id="restockForm" class="order-form">
+            <div class="form-group"><label>Mã kho</label><input id="restockWarehouse" required placeholder="WH01"></div>
+            <div class="form-group"><label>Mã sản phẩm / SKU</label><input id="restockProductId" required placeholder="SKU001"></div>
+            <div class="form-group"><label>Số lượng nhập thêm</label><input id="restockQuantity" type="number" min="1" required value="100"></div>
+            <div class="form-actions">
+                <button id="restockBtn" type="submit">Nhập thêm hàng</button>
+                <span id="restockMessage" class="form-message">Dùng cho SKU sắp hết, nguy cấp hoặc đã hết hàng.</span>
+            </div>
+        </form>
+        <div class="prediction-result" style="margin-top:14px">
+            <div class="result-box"><span>Tồn trước</span><strong id="restockBefore">-</strong></div>
+            <div class="result-box"><span>Nhập thêm</span><strong id="restockAdded">-</strong></div>
+            <div class="result-box"><span>Tồn sau</span><strong id="restockAfter">-</strong></div>
+            <div class="result-box"><span>Mức tồn kho</span><strong id="restockLevel">-</strong></div>
+            <div class="result-box"><span>Reorder Point</span><strong id="restockRop">-</strong></div>
+            <div class="result-box"><span>Cần nhập</span><strong id="restockNeed">-</strong></div>
+        </div>
+    </div>
+
     <div id="alertsSection" class="panel feature-hidden" style="margin-bottom:15px">
         <div class="section-heading">
             <h3>Cảnh báo tồn kho realtime</h3>
             <span>LOW, CRITICAL và OUT_OF_STOCK</span>
         </div>
         <div class="table-wrap"><table>
-            <thead><tr><th>Mã đơn</th><th>Kho</th><th>SKU</th><th>Tồn kho</th><th>Dự báo</th><th>Mức</th><th>Cần nhập</th><th>Cập nhật</th></tr></thead>
+            <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Order Quantity</th><th>Tồn trước</th><th>Tồn sau</th><th>Dự báo</th><th>Mức tồn kho</th><th>Mức độ bổ sung</th><th>Reorder Point</th><th>Cần nhập</th>
             <tbody id="alertsPageBody"></tbody>
         </table></div>
     </div>
@@ -491,7 +271,61 @@
 
     <div id="inventoryView">
 
-    <div id="orderListSection" class="panel inventory-manage-card">
+    <div id="salesAnalysisSection" class="panel sales-analysis-panel">
+        <div class="sales-analysis-header">
+            <div>
+                <h3>Phân Tích Bán Hàng</h3>
+                <span>Hôm nay 00:00 GMT+7 13:00 (Dữ liệu thay đổi so với hôm qua)</span>
+            </div>
+            <button class="sales-more-btn" type="button">Xem thêm ›</button>
+        </div>
+        <div class="overview-meta sales-sync-meta">
+            <span>🔥 Firebase: <strong id="firebaseConnection">Đang kết nối</strong></span>
+            <span> Nodes: <strong>orders + warehouses</strong></span>
+            <span>🔄 Đồng bộ: <strong id="lastSyncTime">--:--:--</strong></span>
+            <span>🕒 Dữ liệu mới nhất: <strong id="latestDataTime">Chưa có</strong></span>
+            <span>⚡ Đồng bộ: <strong>Firebase onValue</strong></span>
+        </div>
+        <div class="sales-analysis-grid">
+            <div class="sales-metric">
+                <div class="sales-label">Tổng kho <span class="info-dot">?</span></div>
+                <strong id="salesWarehouseTotal">0</strong>
+                <small>— 0,00%</small>
+            </div>
+            <div class="sales-metric">
+                <div class="sales-label">Tổng sản phẩm <span class="info-dot">?</span></div>
+                <strong id="salesProductTotal">0</strong>
+                <small>— 0,00%</small>
+            </div>
+            <div class="sales-metric">
+                <div class="sales-label">Số bán 7 ngày qua <span class="info-dot">?</span></div>
+                <strong id="sales7DaysTotal">0</strong>
+                <small>— 0,00%</small>
+            </div>
+            <div class="sales-metric">
+                <div class="sales-label">Số bán 30 ngày qua <span class="info-dot">?</span></div>
+                <strong id="sales30DaysTotal">0</strong>
+                <small>— 0,00%</small>
+            </div>
+        </div>
+    </div>
+
+    <div id="displayServiceSection" class="panel display-service-panel">
+        <div class="display-service-header">
+            <h3>Dịch vụ Hiển thị Shopee</h3>
+            <button class="sales-more-btn" type="button">Xem thêm ›</button>
+        </div>
+        <div class="display-service-body">
+            <div class="display-service-icon">☂</div>
+            <div class="display-service-content">
+                <strong>Tối đa hóa doanh số bán hàng của bạn với Dịch vụ Hiển thị Shopee!</strong>
+                <p>Tìm hiểu thêm về Dịch vụ Hiển thị Shopee để tạo chiến dịch một cách hiệu quả và tối ưu chi phí.</p>
+            </div>
+            <button class="display-service-btn" type="button">Tìm hiểu thêm</button>
+        </div>
+    </div>
+
+    <div id="orderListSection" class="panel inventory-manage-card feature-hidden">
         <div class="inventory-manage-header">
             <div class="inventory-manage-title">
                 <h3>Đơn hàng gần đây</h3>
@@ -551,15 +385,18 @@
         </table></div>
     </div>
 
-    <div id="warehouseInventorySection" class="panel inventory-manage-card">
+    <div id="warehouseInventorySection" class="panel inventory-manage-card feature-hidden">
         <div class="section-heading">
-            <h3>Tồn kho thực tế theo kho và sản phẩm</h3>
-            <span>Cập nhật trực tiếp từ nhánh warehouses bằng Firebase onValue</span>
+            <div>
+                <h3>Quản lý tồn kho</h3>
+                <span>Theo dõi tồn hiện tại, số bán 7/30 ngày, dự báo nhu cầu và mức cần nhập</span>
+            </div>
+            <button id="warehouseSortBtn" class="secondary-action-btn" type="button">Sắp xếp kho hàng</button>
         </div>
         <div class="table-wrap"><table>
             <thead>
                 <tr>
-                    <th>Kho</th><th>Sản phẩm</th><th>Tồn hiện tại</th><th>Dự báo</th><th>Mức tồn kho</th><th>Reorder Point</th><th>Cần nhập</th><th>Cập nhật</th>
+                    <th>Kho</th><th>Sản phẩm</th><th>Tồn hiện tại</th><th>Số bán 7 ngày qua</th><th>Số bán 30 ngày qua</th><th>Dự báo 7 ngày</th><th>Dự báo 30 ngày</th><th>Reorder Point</th><th>Cần nhập</th><th>Mức tồn kho</th><th>Hoạt động</th>
                 </tr>
             </thead>
             <tbody id="warehouseTableBody"></tbody>
@@ -578,1059 +415,7 @@
 </main>
 </div>
 <div id="toastContainer"></div>
-<script>
-let isPaused = false;
-let realtimeOrders = {};
-let realtimeWarehouses = {};
-let renderTimer = null;
-let alertSnapshotInitialized = false;
-const knownAlerts = new Set();
-let appliedInventoryFilters = {
-    query: "",
-    warehouse: "",
-    level: ""
-};
-let stockAlertsEnabled =
-    localStorage.getItem("stockAlertsEnabled") !== "false";
-let pushNotificationFilter = "ALL";
-let currentNotificationAlerts = [];
-const readNotificationKeys = new Set(
-    JSON.parse(localStorage.getItem("readNotificationKeys") || "[]")
-);
-
-const dashboardNav = document.getElementById("dashboardNav");
-const inventoryNav = document.getElementById("inventoryNav");
-const orderDetailsNav = document.getElementById("orderDetailsNav");
-const breadcrumbCurrent = document.getElementById("breadcrumbCurrent");
-const overviewView = document.getElementById("overviewView");
-const inventoryView = document.getElementById("inventoryView");
-const orderDetailsView = document.getElementById("orderDetailsView");
-const orderManagementNav = document.getElementById("orderManagementNav");
-const forecastNav = document.getElementById("forecastNav");
-const productMenuToggle = document.getElementById("productMenuToggle");
-const productSubmenu = document.getElementById("productSubmenu");
-const allProductsNav = document.getElementById("allProductsNav");
-const addProductNav = document.getElementById("addProductNav");
-const alertNav = document.getElementById("alertNav");
-const historyNav = document.getElementById("historyNav");
-const settingsNav = document.getElementById("settingsNav");
-
-function showMenuView(activeNav, activeView) {
-    [overviewView, inventoryView, orderDetailsView].forEach(view =>
-        view.classList.add("view-hidden")
-    );
-    [dashboardNav, inventoryNav, orderDetailsNav].forEach(nav =>
-        nav.classList.remove("active")
-    );
-    activeView.classList.remove("view-hidden");
-    activeNav.classList.add("active");
-}
-
-dashboardNav.addEventListener("click", () => {
-    [dashboardNav, inventoryNav, orderDetailsNav].forEach(nav =>
-        nav.classList.remove("active")
-    );
-    showDashboardPage();
-    dashboardNav.classList.add("active");
-    breadcrumbCurrent.textContent = "Dashboard tổng quan";
-    window.scrollTo({ top: 0, behavior: "smooth" });
-});
-
-const featureSectionIds = [
-    "overviewSection",
-    "orderFormSection",
-    "modelSection",
-    "chartsSection",
-    "realtimeLogSection",
-    "addProductSection",
-    "alertsSection",
-    "orderListSection",
-    "warehouseInventorySection"
-];
-
-const dashboardSectionIds = [
-    "overviewSection",
-    "orderFormSection",
-    "modelSection",
-    "chartsSection",
-    "realtimeLogSection",
-    "orderListSection",
-    "warehouseInventorySection"
-];
-
-function showMainDashboard() {
-    overviewView.classList.remove("view-hidden");
-    inventoryView.classList.remove("view-hidden");
-    orderDetailsView.classList.add("view-hidden");
-}
-
-function showSections(sectionIds) {
-    showMainDashboard();
-    featureSectionIds.forEach(id => {
-        document.getElementById(id)?.classList.add("feature-hidden");
-    });
-    sectionIds.forEach(id => {
-        document.getElementById(id)?.classList.remove("feature-hidden");
-    });
-}
-
-function showDashboardPage() {
-    showSections(dashboardSectionIds);
-}
-
-function activateMenu(element, breadcrumb, sectionIds) {
-    document.querySelectorAll(
-        ".sidebar .nav-item.active, .sidebar .menu-parent.active"
-    ).forEach(item => item.classList.remove("active"));
-    element.classList.add("active");
-    const sections = Array.isArray(sectionIds) ? sectionIds : [sectionIds];
-    showSections(sections);
-    breadcrumbCurrent.textContent = breadcrumb;
-    window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-window.openAlertNotification = orderId => {
-    activateMenu(alertNav, "Cảnh báo tồn kho", "alertsSection");
-    document.getElementById("pushWrapper").classList.remove("open");
-
-    setTimeout(() => {
-        const targetRow = Array.from(
-            document.querySelectorAll("#alertsPageBody tr[data-order-id]")
-        ).find(row => row.dataset.orderId === String(orderId));
-        if (!targetRow) {
-            document.getElementById("alertsSection")?.scrollIntoView({
-                behavior: "smooth",
-                block: "start"
-            });
-            return;
-        }
-        targetRow.classList.add("alert-row-highlight");
-        targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
-        setTimeout(() => targetRow.classList.remove("alert-row-highlight"), 3000);
-    }, 400);
-    return false;
-};
-
-orderManagementNav.addEventListener("click", () => {
-    activateMenu(
-        orderManagementNav,
-        "Quản lý đơn hàng",
-        ["orderFormSection", "orderListSection"]
-    );
-});
-
-forecastNav.addEventListener("click", () => {
-    activateMenu(
-        forecastNav,
-        "Dự báo nhu cầu",
-        ["modelSection", "chartsSection"]
-    );
-});
-
-productMenuToggle.addEventListener("click", () => {
-    productSubmenu.classList.toggle("collapsed");
-    productMenuToggle.querySelector(".chevron").textContent =
-        productSubmenu.classList.contains("collapsed") ? "⌄" : "⌃";
-});
-
-allProductsNav.addEventListener("click", () => {
-    activateMenu(
-        allProductsNav,
-        "Tất cả sản phẩm",
-        "warehouseInventorySection"
-    );
-});
-
-addProductNav.addEventListener("click", () => {
-    activateMenu(
-        addProductNav,
-        "Thêm sản phẩm",
-        "addProductSection"
-    );
-    document.getElementById("newProductId").focus();
-});
-
-alertNav.addEventListener("click", event => {
-    event.stopPropagation();
-    activateMenu(
-        alertNav,
-        "Cảnh báo tồn kho",
-        "alertsSection"
-    );
-    document.getElementById("pushWrapper").classList.remove("open");
-});
-
-historyNav.addEventListener("click", () => {
-    activateMenu(
-        historyNav,
-        "Lịch sử đồng bộ",
-        "realtimeLogSection"
-    );
-});
-
-settingsNav.addEventListener("click", () => {
-    activateMenu(
-        settingsNav,
-        "Cài đặt hệ thống",
-        "overviewSection"
-    );
-});
-
-inventoryNav.addEventListener("click", () => {
-    activateMenu(
-        inventoryNav,
-        "Quản lý tồn kho",
-        ["warehouseInventorySection", "orderListSection"]
-    );
-});
-
-orderDetailsNav.addEventListener("click", () => {
-    showMenuView(orderDetailsNav, orderDetailsView);
-    breadcrumbCurrent.textContent = "Chi tiết đơn hàng";
-});
-
-document.getElementById("pushNotificationIcon").addEventListener("click", event => {
-    event.stopPropagation();
-    document.getElementById("pushWrapper").classList.toggle("open");
-});
-
-document.getElementById("pushDropdownList").addEventListener("click", event => {
-    const item = event.target.closest(".push-dropdown-item");
-    if (!item) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    markNotificationRead(item.dataset.notificationKey);
-    if (event.target.closest('[data-action="mark-read"]')) {
-        renderPushDropdown(currentNotificationAlerts);
-        return;
-    }
-    const orderId = item.dataset.orderId || "";
-    window.openAlertNotification(orderId);
-});
-
-document.getElementById("viewAllAlertsBtn").addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    activateMenu(alertNav, "Cảnh báo tồn kho", "alertsSection");
-    document.getElementById("pushWrapper").classList.remove("open");
-});
-
-document.getElementById("markAllReadBtn").addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    currentNotificationAlerts.forEach(order =>
-        readNotificationKeys.add(alertKey(order))
-    );
-    saveReadNotificationKeys();
-    renderPushDropdown(currentNotificationAlerts);
-});
-
-document.getElementById("pushFilterTabs").addEventListener("click", event => {
-    const tab = event.target.closest(".push-filter-tab");
-    if (!tab) return;
-    event.stopPropagation();
-    pushNotificationFilter = tab.dataset.filter;
-    document.querySelectorAll(".push-filter-tab").forEach(button =>
-        button.classList.toggle("active", button === tab)
-    );
-    renderPushDropdown(currentNotificationAlerts);
-});
-
-document.addEventListener("click", () => {
-    document.getElementById("pushWrapper").classList.remove("open");
-});
-
-function applyInventoryFilters() {
-    appliedInventoryFilters = {
-        query: document.getElementById("searchInput").value
-            .trim().toLowerCase(),
-        warehouse: document.getElementById("warehouseFilter").value,
-        level: document.getElementById("levelFilter").value
-    };
-    scheduleRender();
-}
-
-document.getElementById("inventorySearchBtn").addEventListener(
-    "click",
-    applyInventoryFilters
-);
-document.getElementById("searchInput").addEventListener("keydown", event => {
-    if (event.key === "Enter") applyInventoryFilters();
-});
-document.getElementById("searchInput").addEventListener("input", event => {
-    if (event.target.value !== "") return;
-    document.getElementById("warehouseFilter").value = "";
-    document.getElementById("levelFilter").value = "";
-    appliedInventoryFilters = { query: "", warehouse: "", level: "" };
-    document.querySelectorAll(".inventory-tab").forEach(button =>
-        button.classList.toggle("active", button.dataset.level === "")
-    );
-    scheduleRender();
-});
-
-document.querySelectorAll(".inventory-tab").forEach(tabButton => {
-    tabButton.addEventListener("click", () => {
-        document.querySelectorAll(".inventory-tab").forEach(button =>
-            button.classList.remove("active")
-        );
-        tabButton.classList.add("active");
-        document.getElementById("levelFilter").value =
-            tabButton.dataset.level || "";
-        appliedInventoryFilters.level = tabButton.dataset.level || "";
-        scheduleRender();
-    });
-});
-
-function updateStockAlertToggle() {
-    document.getElementById("stockAlertSwitch").classList.toggle(
-        "off",
-        !stockAlertsEnabled
-    );
-    document.getElementById("stockAlertToggle").title =
-        stockAlertsEnabled
-            ? "Đang bật thông báo sắp hết hàng"
-            : "Đang tắt thông báo sắp hết hàng";
-}
-
-function toggleStockAlerts() {
-    stockAlertsEnabled = !stockAlertsEnabled;
-    localStorage.setItem("stockAlertsEnabled", String(stockAlertsEnabled));
-    updateStockAlertToggle();
-    scheduleRender();
-    if (!stockAlertsEnabled) {
-        document.getElementById("toastContainer").innerHTML = "";
-        document.getElementById("pushWrapper").classList.remove("open");
-    }
-}
-
-document.getElementById("stockAlertToggle").addEventListener(
-    "click",
-    toggleStockAlerts
-);
-document.getElementById("stockAlertToggle").addEventListener("keydown", event => {
-    if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        toggleStockAlerts();
-    }
-});
-updateStockAlertToggle();
-
-function scheduleRender() {
-    if (renderTimer) return;
-
-    renderTimer = setTimeout(() => {
-        renderTimer = null;
-        renderDashboard(realtimeOrders);
-    }, 250);
-}
-
-let latestFirebaseOrders = {};
-
-window.applyFirebaseOrders = data => {
-    latestFirebaseOrders = data || {};
-    if (isPaused) return;
-
-    detectNewAlerts(latestFirebaseOrders);
-    realtimeOrders = latestFirebaseOrders;
-    scheduleRender();
-    renderStockLevelChart(Object.values(latestFirebaseOrders));
-    renderLatestRealtimeLog(Object.values(latestFirebaseOrders));
-    renderAlertsPage(Object.values(latestFirebaseOrders));
-    document.getElementById("lastSyncTime").textContent =
-        new Date().toLocaleTimeString("vi-VN");
-    document.getElementById("firebaseConnection").textContent = "Connected";
-    document.getElementById("firebaseConnection").className =
-        "firebase-connected";
-    document.getElementById("realtimeStatus").innerHTML =
-        "🟢 Đang đồng bộ trực tiếp qua Firebase onValue";
-};
-
-function renderAlertsPage(orders) {
-    const alerts = orders
-        .filter(isWarningOrder)
-        .sort((a, b) =>
-            Number(b.last_updated || 0) - Number(a.last_updated || 0)
-        );
-    const body = document.getElementById("alertsPageBody");
-    body.innerHTML = alerts.length
-        ? alerts.map(order => `
-            <tr data-order-id="${order.order_id || ""}">
-                <td>${order.order_id || "-"}</td>
-                <td>${order.warehouse_id || "-"}</td>
-                <td>${order.product_id || "-"}</td>
-                <td>${order.inventory ?? 0}</td>
-                <td>${order.future_demand ?? 0}</td>
-                <td><span class="level-badge level-${order.inventory_level}">${order.inventory_level}</span></td>
-                <td>${order.reorder_quantity ?? 0}</td>
-                <td>${order.last_updated_text || "-"}</td>
-            </tr>
-        `).join("")
-        : '<tr><td colspan="8">Không có cảnh báo tồn kho.</td></tr>';
-}
-
-window.handleFirebaseError = error => {
-    console.error("Firebase onValue failed:", error);
-    document.getElementById("realtimeStatus").innerHTML =
-        '<span style="color:#ef4444">🔴 Firebase mất kết nối</span>';
-    document.getElementById("firebaseConnection").textContent =
-        "Disconnected";
-    document.getElementById("firebaseConnection").className =
-        "firebase-error";
-};
-
-window.applyFirebaseWarehouses = data => {
-    realtimeWarehouses = data || {};
-    renderWarehouseInventory(realtimeWarehouses);
-    renderStockForecastChart(realtimeWarehouses);
-};
-
-function renderStockLevelChart(orders) {
-    const levels = {
-        NORMAL: 0,
-        LOW: 0,
-        CRITICAL: 0,
-        OUT_OF_STOCK: 0
-    };
-    orders.forEach(order => {
-        const level = order.inventory_level || "NORMAL";
-        if (levels[level] !== undefined) levels[level]++;
-    });
-    const max = Math.max(1, ...Object.values(levels));
-    const colors = {
-        NORMAL: "#22c55e",
-        LOW: "#eab308",
-        CRITICAL: "#f97316",
-        OUT_OF_STOCK: "#ef4444"
-    };
-    document.getElementById("stockLevelChart").innerHTML =
-        Object.entries(levels).map(([level, count]) => `
-            <div class="visual-row">
-                <span>${level}</span>
-                <div class="visual-track">
-                    <div class="visual-fill" style="width:${count / max * 100}%;background:${colors[level]}"></div>
-                </div>
-                <strong>${count}</strong>
-            </div>
-        `).join("");
-}
-
-function flattenWarehouseProducts(data) {
-    const rows = [];
-    Object.entries(data || {}).forEach(([warehouseId, warehouse]) => {
-        Object.entries(warehouse?.products || {}).forEach(([productId, product]) => {
-            rows.push({ warehouseId, productId, ...product });
-        });
-    });
-    return rows;
-}
-
-function renderStockForecastChart(data) {
-    const rows = flattenWarehouseProducts(data)
-        .sort((a, b) => Number(b.last_updated || 0) - Number(a.last_updated || 0))
-        .slice(0, 10);
-    const max = Math.max(
-        1,
-        ...rows.flatMap(item => [
-            Number(item.stock || 0),
-            Number(item.future_demand || 0)
-        ])
-    );
-    document.getElementById("stockForecastChart").innerHTML = rows.length
-        ? rows.map(item => `
-            <div>
-                <div style="font-size:12px;font-weight:700;margin-bottom:3px">${item.warehouseId} / ${item.productId}</div>
-                <div class="visual-row">
-                    <span>Tồn kho</span><div class="visual-track"><div class="visual-fill" style="width:${Number(item.stock || 0) / max * 100}%"></div></div><strong>${item.stock || 0}</strong>
-                </div>
-                <div class="visual-row">
-                    <span>Dự báo RF</span><div class="visual-track"><div class="visual-fill demand" style="width:${Number(item.future_demand || 0) / max * 100}%"></div></div><strong>${item.future_demand || 0}</strong>
-                </div>
-            </div>
-        `).join("")
-        : '<div>Chưa có dữ liệu sản phẩm.</div>';
-}
-
-function renderLatestRealtimeLog(orders) {
-    const latest = [...orders].sort(
-        (a, b) => Number(b.last_updated || 0) - Number(a.last_updated || 0)
-    )[0];
-    if (!latest?.processing_logs) return;
-    const container = document.getElementById("realtimeLog");
-    container.innerHTML = "";
-    latest.processing_logs.forEach(item => {
-        const line = document.createElement("div");
-        line.className = "log-line";
-        line.textContent = `${item.time || "--:--:--"} - ${item.message || ""}`;
-        container.appendChild(line);
-    });
-    if (latest.server_completed_at_ms) {
-        const latency = Math.max(
-            0,
-            Date.now() - Number(latest.server_completed_at_ms)
-        );
-        const line = document.createElement("div");
-        line.className = "log-line";
-        line.textContent =
-            `${new Date().toLocaleTimeString("vi-VN")} - Firebase onValue nhận dữ liệu (${latency} ms)`;
-        container.appendChild(line);
-    }
-}
-
-function renderWarehouseInventory(data) {
-    const tableBody = document.getElementById("warehouseTableBody");
-    const rows = flattenWarehouseProducts(data);
-
-    rows.sort((a, b) =>
-        Number(b.last_updated || 0) - Number(a.last_updated || 0)
-    );
-
-    tableBody.innerHTML = rows.length
-        ? rows.map(item => `
-            <tr>
-                <td>${item.warehouseId}</td>
-                <td>${item.productId}</td>
-                <td><strong>${item.stock ?? 0}</strong></td>
-                <td>${item.future_demand ?? '-'}</td>
-                <td>
-                    <span class="level-badge level-${item.inventory_level || 'NORMAL'}">
-                        ${item.inventory_level || 'CHƯA ĐÁNH GIÁ'}
-                    </span>
-                </td>
-                <td>${item.reorder_point ?? '-'}</td>
-                <td>${item.reorder_quantity ?? 0}</td>
-                <td>${item.last_updated_text || '-'}</td>
-            </tr>
-        `).join("")
-        : '<tr><td colspan="8">Chưa có dữ liệu tồn kho.</td></tr>';
-}
-
-function isWarningOrder(order) {
-    const alert = String(order?.alert || "NORMAL");
-    const level = String(order?.inventory_level || "NORMAL");
-    return (
-        alert !== "NORMAL" ||
-        level === "LOW" ||
-        level === "CRITICAL" ||
-        level === "OUT_OF_STOCK"
-    );
-}
-
-function alertKey(order) {
-    return `${order.order_id}|${order.alert}|${order.last_updated || order.timestamp || ""}`;
-}
-
-function detectNewAlerts(data) {
-    const warningOrders = Object.values(data).filter(isWarningOrder);
-
-    if (!alertSnapshotInitialized) {
-        warningOrders.forEach(order => knownAlerts.add(alertKey(order)));
-        alertSnapshotInitialized = true;
-        return;
-    }
-
-    if (!stockAlertsEnabled) return;
-
-    warningOrders.forEach(order => {
-        const key = alertKey(order);
-        if (knownAlerts.has(key)) return;
-        knownAlerts.add(key);
-        showAlertToast(order);
-    });
-}
-
-function showAlertToast(order) {
-    const container = document.getElementById("toastContainer");
-    const toast = document.createElement("div");
-    toast.className = "toast";
-    toast.innerHTML = `
-        <strong>🚨 ${order.alert || order.inventory_level}</strong><br>
-        ${order.order_id || "N/A"} · Kho ${order.warehouse_id || "N/A"} ·
-        Tồn ${order.inventory ?? 0} · Cần nhập ${order.reorder_quantity ?? 0}
-    `;
-    container.prepend(toast);
-    while (container.children.length > 3) {
-        container.lastElementChild.remove();
-    }
-    setTimeout(() => toast.remove(), 6000);
-}
-
-function renderNotifications(orders, toTimestamp) {
-    const alerts = stockAlertsEnabled ? orders
-        .filter(isWarningOrder)
-        .sort((a, b) =>
-            toTimestamp(b.last_updated || b.timestamp) -
-            toTimestamp(a.last_updated || a.timestamp)
-        ) : [];
-
-    currentNotificationAlerts = alerts;
-    const unreadCount = alerts.filter(order =>
-        !readNotificationKeys.has(alertKey(order))
-    ).length;
-    document.getElementById("pushNotificationBadge").textContent =
-        unreadCount > 99 ? "99+" : unreadCount;
-    document.getElementById("pushNotificationIcon").classList.toggle(
-        "push-active",
-        unreadCount > 0
-    );
-    renderPushDropdown(alerts);
-}
-
-function saveReadNotificationKeys() {
-    localStorage.setItem(
-        "readNotificationKeys",
-        JSON.stringify(Array.from(readNotificationKeys).slice(-500))
-    );
-}
-
-function markNotificationRead(key) {
-    if (!key) return;
-    readNotificationKeys.add(key);
-    saveReadNotificationKeys();
-}
-
-function notificationTime(order) {
-    let value = Number(order.last_updated || order.timestamp || 0);
-    if (!value) return order.last_updated_text || "Không rõ thời gian";
-    if (value < 1000000000000) value *= 1000;
-    const diffSeconds = Math.max(0, Math.floor((Date.now() - value) / 1000));
-    if (diffSeconds < 60) return "Vừa xong";
-    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} phút trước`;
-    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} giờ trước`;
-    return new Date(value).toLocaleString("vi-VN");
-}
-
-function renderPushDropdown(alerts) {
-    const dropdownList = document.getElementById("pushDropdownList");
-    const filteredAlerts = alerts.filter(order => {
-        const level = order.inventory_level || "NORMAL";
-        if (pushNotificationFilter === "ALL") return true;
-        if (pushNotificationFilter === "READ") {
-            return readNotificationKeys.has(alertKey(order));
-        }
-        return level === pushNotificationFilter;
-    });
-
-    if (!filteredAlerts.length) {
-        dropdownList.innerHTML = '<div class="push-empty">Không có thông báo phù hợp.</div>';
-        return;
-    }
-
-    dropdownList.innerHTML = filteredAlerts.slice(0, 15).map(order => {
-        const level = order.inventory_level || "NORMAL";
-        const key = alertKey(order);
-        const isUnread = !readNotificationKeys.has(key);
-        const title = level === "OUT_OF_STOCK"
-            ? "⚫ SẢN PHẨM ĐÃ HẾT HÀNG"
-            : level === "CRITICAL"
-                ? "🔴 CẢNH BÁO TỒN KHO NGUY CẤP"
-                : level === "LOW"
-                    ? "🟡 SẢN PHẨM SẮP HẾT HÀNG"
-                    : "🟢 TỒN KHO BÌNH THƯỜNG";
-        return `
-            <div class="push-dropdown-item level-${level} ${isUnread ? "unread" : ""}"
-               href="#alertsSection"
-               data-order-id="${order.order_id || ""}"
-               data-notification-key="${key}">
-                ${isUnread ? '<span class="push-unread-dot"></span>' : ""}
-                <div class="push-dropdown-icon">S</div>
-                <div>
-                    <div class="push-title-row">
-                        <strong>${title}</strong>
-                        <span class="push-level-badge">${level.replaceAll("_", " ")}</span>
-                    </div>
-                    <p>
-                        Mã: ${order.order_id || "N/A"} | Kho: ${order.warehouse_id || "N/A"}<br>
-                        Tồn: ${order.inventory ?? 0} | Dự báo RF: ${order.future_demand ?? 0} |
-                        Cần nhập: ${order.reorder_quantity ?? 0}
-                    </p>
-                    <span class="push-notification-time">${notificationTime(order)}</span>
-                    <div class="push-item-actions">
-                        <button class="push-item-action" data-action="view">Xem chi tiết</button>
-                        ${isUnread ? '<button class="push-item-action" data-action="mark-read">Đánh dấu đã đọc</button>' : ""}
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join("");
-
-    const unreadCount = alerts.filter(order =>
-        !readNotificationKeys.has(alertKey(order))
-    ).length;
-    document.getElementById("pushNotificationBadge").textContent =
-        unreadCount > 99 ? "99+" : unreadCount;
-    document.getElementById("pushNotificationIcon").classList.toggle(
-        "push-active",
-        unreadCount > 0
-    );
-}
-
-// Nút Tạm Dừng
-document.getElementById('pauseBtn').addEventListener('click', () => {
-    isPaused = !isPaused;
-    const btn = document.getElementById('pauseBtn');
-    const status = document.getElementById('realtimeStatus');
-    
-    if (isPaused) {
-        btn.textContent = '▶️ Tiếp tục';
-        btn.style.background = '#22c55e';
-        status.innerHTML = '⏸️ <span style="color:#f59e0b">Đã tạm dừng</span>';
-    } else {
-        btn.textContent = '⏸️ Tạm dừng';
-        btn.style.background = '#f59e0b';
-        status.innerHTML = '🟢 Đang đồng bộ trực tiếp qua Firebase onValue';
-        window.applyFirebaseOrders(latestFirebaseOrders);
-    }
-});
-
-function renderDashboard(data) {
-    const ordersDiv = document.getElementById("orders");
-    const tableBody = document.getElementById("orderTableBody");
-
-    ordersDiv.innerHTML = "";
-    tableBody.innerHTML = "";
-
-    let totalOrders = 0, normalStock = 0, lowStock = 0;
-    let criticalStock = 0, outOfStock = 0, reorder = 0, totalInv = 0;
-
-    const toTimestamp = value => {
-        if (typeof value === "number") return value;
-        const numeric = Number(value);
-        if (Number.isFinite(numeric)) return numeric;
-        const parsed = Date.parse(value);
-        return Number.isFinite(parsed) ? parsed : 0;
-    };
-
-    const allOrders = Object.values(data);
-    const latestTimestamp = allOrders.reduce((latest, order) => {
-        return Math.max(
-            latest,
-            toTimestamp(order.last_updated || order.timestamp)
-        );
-    }, 0);
-    document.getElementById("latestDataTime").textContent =
-        latestTimestamp
-            ? new Date(
-                latestTimestamp < 1000000000000
-                    ? latestTimestamp * 1000
-                    : latestTimestamp
-              ).toLocaleString("vi-VN")
-            : "Chưa có";
-    const warehouseFilter = document.getElementById("warehouseFilter");
-    const currentWarehouse = warehouseFilter.value;
-    const warehouses = [...new Set(
-        allOrders.map(order => order.warehouse_id).filter(Boolean)
-    )].sort();
-    warehouseFilter.innerHTML =
-        '<option value="">Tất cả kho</option>' +
-        warehouses.map(warehouse =>
-            `<option value="${warehouse}">${warehouse}</option>`
-        ).join("");
-    warehouseFilter.value = warehouses.includes(currentWarehouse)
-        ? currentWarehouse
-        : "";
-
-    const query = appliedInventoryFilters.query;
-    const selectedWarehouse = appliedInventoryFilters.warehouse;
-    const selectedLevel = appliedInventoryFilters.level;
-
-    const filteredOrders = allOrders.filter(order => {
-        const searchable = [
-            order.order_id,
-            order.product_id,
-            order.warehouse_id
-        ].join(" ").toLowerCase();
-
-        return (
-            (!query || searchable.includes(query)) &&
-            (!selectedWarehouse || order.warehouse_id === selectedWarehouse) &&
-            (!selectedLevel || order.inventory_level === selectedLevel)
-        );
-    });
-
-    const displayOrders = [...filteredOrders]
-        .sort((a, b) =>
-            toTimestamp(b.last_updated || b.timestamp) -
-            toTimestamp(a.last_updated || a.timestamp)
-        )
-        .slice(0, 30);
-
-    allOrders.forEach(o => {
-        totalOrders++;
-        totalInv += Number(o.inventory || 0);
-
-        if (o.reorder_required === true) reorder++;
-
-        let statusClass = "ok";
-        const level = String(
-    o.inventory_level || ""
-);
-
-if (
-    level === "LOW" ||
-    level === "CRITICAL" ||
-    level === "OUT_OF_STOCK"
-) {
-    if (level === "LOW") lowStock++;
-    if (level === "CRITICAL") criticalStock++;
-    if (level === "OUT_OF_STOCK") outOfStock++;
-}
-else if (
-
-    String(o.inventory_level).includes("LOW")
-    ||
-    o.reorder_required === true
-
-) {
-
-    statusClass = "warning";
-    lowStock++;
-
-} else {
-    normalStock++;
-}
-    });
-
-    displayOrders.forEach(o => {
-        let statusClass = "ok";
-        const level = String(o.inventory_level || "");
-
-        if (
-            level === "LOW" ||
-            level === "CRITICAL" ||
-            level === "OUT_OF_STOCK" ||
-            String(o.inventory_level).includes("LOW") ||
-            o.reorder_required === true
-        ) {
-            statusClass = "warning";
-        }
-
-        ordersDiv.innerHTML += `
-            <div class="card ${statusClass}">
-                <strong>📦 ${o.order_id || 'N/A'}</strong><br>
-                <span style="color:${getStatusColor(o.status)}">${o.status || '-'}</span><br>
-                Kho: ${o.warehouse_id || '-'} | Order Quantity: ${o.order_quantity ?? 0} | Tồn: ${o.inventory ?? 0} | Demand: ${o.future_demand ?? 0}<br>
-                Level: <strong>${o.inventory_level || '-'}</strong> - ${o.inventory_level_description || getInventoryLevelDescription(o.inventory_level)}<br>
-                ROP: ${o.reorder_point ?? '-'} | Cần nhập: ${o.reorder_quantity ?? 0}
-            </div>`;
-
-        tableBody.innerHTML += `
-            <tr>
-                <td>${o.order_id || '-'}</td>
-                <td>${o.status || '-'}</td>
-                <td>${o.warehouse_id || '-'}</td>
-                <td>${o.order_quantity ?? 0}</td>
-                <td>${o.inventory_before ?? '-'}</td>
-                <td>${o.inventory ?? 0}</td>
-                <td>${o.future_demand ?? 0}</td>
-                <td>
-                    <span class="level-badge level-${o.inventory_level || 'NORMAL'}">
-                        ${o.inventory_level || '-'}
-                    </span>
-                    ${o.inventory_level_description || getInventoryLevelDescription(o.inventory_level)}
-                </td>
-                <td>
-                    <span class="replenish-badge replenish-${o.inventory_level || 'NORMAL'}">
-                        ${getReplenishmentLabel(o.inventory_level)}
-                    </span>
-                </td>
-                <td>${o.reorder_point ?? '-'}</td>
-                <td>${o.reorder_quantity ?? 0}</td>
-            </tr>`;
-    });
-    // Update Stats
-    document.getElementById("totalOrders").innerText = totalOrders;
-    document.getElementById("normalStock").innerText = normalStock;
-    document.getElementById("lowStock").innerText = lowStock;
-    document.getElementById("criticalStock").innerText = criticalStock;
-    document.getElementById("outOfStock").innerText = outOfStock;
-    document.getElementById("reorderCount").innerText = reorder;
-    document.getElementById("tabAllCount").innerText = totalOrders;
-    document.getElementById("tabNormalCount").innerText = normalStock;
-    document.getElementById("tabLowCount").innerText = lowStock;
-    document.getElementById("tabCriticalCount").innerText = criticalStock;
-    document.getElementById("tabOutCount").innerText = outOfStock;
-
-    renderNotifications(allOrders, toTimestamp);
-}
-
-function getStatusColor(status) {
-    const colors = { "Pending":"#f97316", "Processing":"#3b82f6", "Shipping":"#eab308", "Delivered":"#22c55e", "Cancelled":"#ef4444" };
-    return colors[status] || "#94a3b8";
-}
-
-function getInventoryLevelDescription(level) {
-    const descriptions = {
-        "NORMAL": "Tồn kho an toàn",
-        "LOW": "Tồn kho thấp",
-        "CRITICAL": "Tồn kho rất thấp",
-        "OUT_OF_STOCK": "Hết hàng"
-    };
-    return descriptions[level] || "Không xác định";
-}
-
-function getReplenishmentLabel(level) {
-    const labels = {
-        "NORMAL": "✓ Bình thường",
-        "LOW": "● Bổ sung sớm",
-        "CRITICAL": "⚠ Bổ sung gấp",
-        "OUT_OF_STOCK": "⛔ Bổ sung ngay"
-    };
-    return labels[level] || "N/A";
-}
-
-function showOrderResult(order) {
-    document.getElementById("resultBefore").textContent =
-        order.inventory_before ?? "-";
-    document.getElementById("resultQuantity").textContent =
-        order.order_quantity ?? "-";
-    document.getElementById("resultDemand").textContent =
-        order.future_demand ?? "-";
-    document.getElementById("resultAfter").textContent =
-        order.inventory ?? "-";
-    document.getElementById("resultRop").textContent =
-        order.reorder_point ?? "-";
-    document.getElementById("resultReorder").textContent =
-        order.reorder_quantity ?? "-";
-    document.getElementById("resultLevel").textContent =
-        order.inventory_level ?? "-";
-    document.getElementById("resultAlert").textContent =
-        order.alert ?? "-";
-}
-
-function showFormLogs(logs) {
-    const container = document.getElementById("realtimeLog");
-    container.innerHTML = "";
-    (logs || []).forEach(item => {
-        const line = document.createElement("div");
-        line.className = "log-line";
-        line.textContent = `${item.time || "--:--:--"} - ${item.message || ""}`;
-        container.appendChild(line);
-    });
-}
-
-document.getElementById("formOrderDate").value =
-    new Date().toISOString().slice(0, 10);
-
-document.getElementById("newOrderForm").addEventListener("submit", async event => {
-    event.preventDefault();
-    const button = document.getElementById("submitOrderBtn");
-    const message = document.getElementById("formMessage");
-    button.disabled = true;
-    message.className = "form-message";
-    message.textContent = "Đang chạy dự báo và xử lý tồn kho...";
-
-    const payload = {
-        order_id: document.getElementById("formOrderId").value.trim(),
-        product_id: document.getElementById("formProductId").value.trim(),
-        warehouse_id: document.getElementById("formWarehouseId").value.trim(),
-        order_quantity: document.getElementById("formOrderQuantity").value,
-        lead_time: document.getElementById("formLeadTime").value,
-        order_date: document.getElementById("formOrderDate").value,
-        daily_sales: document.getElementById("formDailySales").value,
-        initial_stock: document.getElementById("formInitialStock").value
-    };
-
-    try {
-        const response = await fetch("/api/orders/process", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        if (!response.ok || !result.ok) {
-            const details = result.errors
-                ? Object.values(result.errors).join(" ")
-                : result.error || "Không thể xử lý đơn hàng.";
-            throw new Error(details);
-        }
-        showOrderResult(result.order);
-        showFormLogs(result.logs);
-        message.className = result.order.fallback_used
-            ? "form-message error"
-            : "form-message success";
-        message.textContent = result.order.fallback_used
-            ? `Đã xử lý ${result.order.order_id} bằng FALLBACK: ${result.order.prediction_error || "model không khả dụng"}.`
-            : `Đã xử lý ${result.order.order_id} bằng ${result.order.model_mode} (${result.order.model_version}); Dashboard nhận qua onValue.`;
-    } catch (error) {
-        message.className = "form-message error";
-        message.textContent = error.message;
-    } finally {
-        button.disabled = false;
-    }
-});
-
-document.getElementById("addProductForm").addEventListener("submit", async event => {
-    event.preventDefault();
-    const button = document.getElementById("addProductBtn");
-    const message = document.getElementById("addProductMessage");
-    button.disabled = true;
-    message.className = "form-message";
-    message.textContent = "Đang thêm sản phẩm vào Firebase...";
-
-    try {
-        const response = await fetch("/api/products", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                warehouse_id:
-                    document.getElementById("newProductWarehouse").value.trim(),
-                product_id:
-                    document.getElementById("newProductId").value.trim(),
-                stock:
-                    document.getElementById("newProductStock").value
-            })
-        });
-        const result = await response.json();
-        if (!response.ok || !result.ok) {
-            const details = result.errors
-                ? Object.values(result.errors).join(" ")
-                : result.error || "Không thể thêm sản phẩm.";
-            throw new Error(details);
-        }
-        message.className = "form-message success";
-        message.textContent =
-            `Đã thêm ${result.product.product_id} vào ${result.product.warehouse_id}; onValue đã đồng bộ.`;
-    } catch (error) {
-        message.className = "form-message error";
-        message.textContent = error.message;
-    } finally {
-        button.disabled = false;
-    }
-});
-
-fetch("/api/model-info")
-    .then(response => response.json())
-    .then(info => {
-        document.getElementById("metricMae").textContent =
-            Number(info.mae).toFixed(2);
-        document.getElementById("metricRmse").textContent =
-            Number(info.rmse).toFixed(2);
-        document.getElementById("metricR2").textContent =
-            Number(info.r2).toFixed(4);
-        document.getElementById("modelLoadStatus").textContent = info.loaded
-            ? `${info.name} + ${info.encoding} đã tải thành công`
-            : "Model chưa tải được - đang dùng fallback";
-        document.getElementById("modelLoadStatus").className = info.loaded
-            ? "firebase-connected"
-            : "firebase-error";
-    })
-    .catch(() => {
-        document.getElementById("modelLoadStatus").textContent =
-            "Không đọc được trạng thái model";
-    });
-
-function resetInventoryFilters() {
-    document.getElementById("searchInput").value = "";
-    document.getElementById("warehouseFilter").value = "";
-    document.getElementById("levelFilter").value = "";
-    document.querySelectorAll(".inventory-tab").forEach(button =>
-        button.classList.toggle("active", button.dataset.level === "")
-    );
-    scheduleRender();
-}
-
-</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 <script type="module">
 import { initializeApp } from
     "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -1666,3 +451,4 @@ onValue(
 </script>
 </body>
 </html>
+

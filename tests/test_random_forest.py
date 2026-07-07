@@ -5,15 +5,16 @@ import joblib
 import pandas as pd
 
 
-MODEL_PATH = Path("models/random_forest_model.pkl")
-DATA_PATH = Path("data/processed/kaggle_demand_training.csv")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MODEL_PATH = PROJECT_ROOT / "models" / "random_forest_model.pkl"
+DATA_PATH = PROJECT_ROOT / "data" / "processed" / "kaggle_demand_training.csv"
 
 
 def load_assets():
     if not MODEL_PATH.exists():
-        raise FileNotFoundError("Run first: py train_model.py")
+        raise FileNotFoundError("Run first: python -m ml.train")
     if not DATA_PATH.exists():
-        raise FileNotFoundError("Run first: py prepare_kaggle_data.py")
+        raise FileNotFoundError("Run first: python -m ml.prepare_data")
 
     bundle = joblib.load(MODEL_PATH)
     data = pd.read_csv(DATA_PATH, parse_dates=["date"])

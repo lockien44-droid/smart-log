@@ -3,13 +3,13 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from train_model import FEATURES, MODEL_PATH, TARGET, load_training_data
+from ml.train import FEATURES, MODEL_PATH, TARGET, load_training_data
 
 
 def evaluate_saved_model():
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
-            f"Chưa có model tại {MODEL_PATH}. Hãy chạy train_model.py trước."
+            f"Chưa có model tại {MODEL_PATH}. Hãy chạy python -m ml.train trước."
         )
 
     artifact = joblib.load(MODEL_PATH)

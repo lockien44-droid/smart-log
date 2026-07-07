@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 
-from firebase_config import database as db
+from app.firebase.config import database as db
 
 MAX_HISTORY = 20
 MAX_GPS_HISTORY = 50
@@ -43,6 +43,15 @@ def get_product_stock(warehouse_id, product_id):
         return None
 
     return safe_int(value)
+
+
+def get_product_data(warehouse_id, product_id):
+    value = _product_ref(
+        warehouse_id,
+        product_id
+    ).get()
+
+    return value if isinstance(value, dict) else None
 
 
 def set_product_stock(warehouse_id, product_id, quantity):
@@ -110,6 +119,68 @@ def add_product_stock(warehouse_id, product_id, incoming_quantity):
     return safe_int(new_stock)
 
 
+def rename_product_location(old_warehouse_id, old_product_id, new_warehouse_id, new_product_id):
+    old_warehouse_id = str(old_warehouse_id).strip()
+    old_product_id = str(old_product_id).strip()
+    new_warehouse_id = str(new_warehouse_id).strip()
+    new_product_id = str(new_product_id).strip()
+
+    old_ref = _product_ref(old_warehouse_id, old_product_id)
+    product_data = old_ref.get()
+    if not isinstance(product_data, dict):
+        raise ValueError(
+            f"Không tìm thấy sản phẩm {old_product_id} trong kho {old_warehouse_id}."
+        )
+
+    same_path = (
+        old_warehouse_id == new_warehouse_id and
+        old_product_id == new_product_id
+    )
+    new_ref = _product_ref(new_warehouse_id, new_product_id)
+    if not same_path and new_ref.get() is not None:
+        raise ValueError(
+            f"Sản phẩm {new_product_id} đã tồn tại trong kho {new_warehouse_id}."
+        )
+
+    timestamp = time.time()
+    product_data.update({
+        "warehouse_id": new_warehouse_id,
+        "product_id": new_product_id,
+        "last_updated": timestamp,
+        "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    new_ref.set(product_data)
+    if not same_path:
+        old_ref.delete()
+
+    orders_ref = db.reference("orders")
+    orders = orders_ref.get() or {}
+    updated_orders = 0
+    if isinstance(orders, dict):
+        for order_id, order in orders.items():
+            if not isinstance(order, dict):
+                continue
+            if (
+                str(order.get("warehouse_id", "")) == old_warehouse_id and
+                str(order.get("product_id", "")) == old_product_id
+            ):
+                orders_ref.child(str(order_id)).update({
+                    "warehouse_id": new_warehouse_id,
+                    "product_id": new_product_id,
+                    "last_updated": timestamp,
+                    "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                updated_orders += 1
+
+    return {
+        "old_warehouse_id": old_warehouse_id,
+        "old_product_id": old_product_id,
+        "warehouse_id": new_warehouse_id,
+        "product_id": new_product_id,
+        "updated_orders": updated_orders,
+    }
+
+
 def update_product_inventory_analysis(
     warehouse_id,
     product_id,
@@ -117,9 +188,13 @@ def update_product_inventory_analysis(
     inventory_level,
     reorder_point,
     reorder_quantity,
-    reorder_required
+    reorder_required,
+    future_demand_30=None,
+    daily_sales=None,
+    sales_7_days=None,
+    sales_30_days=None
 ):
-    _product_ref(warehouse_id, product_id).update({
+    data = {
         "future_demand": safe_int(future_demand),
         "inventory_level": str(inventory_level),
         "reorder_point": safe_int(reorder_point),
@@ -127,7 +202,18 @@ def update_product_inventory_analysis(
         "reorder_required": bool(reorder_required),
         "last_updated": time.time(),
         "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
+    }
+
+    if future_demand_30 is not None:
+        data["future_demand_30"] = safe_int(future_demand_30)
+    if daily_sales is not None:
+        data["daily_sales"] = safe_int(daily_sales)
+    if sales_7_days is not None:
+        data["sales_7_days"] = safe_int(sales_7_days)
+    if sales_30_days is not None:
+        data["sales_30_days"] = safe_int(sales_30_days)
+
+    _product_ref(warehouse_id, product_id).update(data)
 
 
 # ==============================
@@ -175,6 +261,10 @@ def update_order_status(
     fallback_used=False,
     prediction_error=None,
     server_completed_at_ms=None,
+    future_demand_30=None,
+    daily_sales=None,
+    sales_7_days=None,
+    sales_30_days=None,
 
     event_id=None
 ):
@@ -237,6 +327,10 @@ def update_order_status(
             "order_quantity": safe_int(order_quantity),
             "processed": bool(processed),
             "future_demand": demand,
+            "future_demand_30": safe_int(future_demand_30),
+            "daily_sales": safe_int(daily_sales),
+            "sales_7_days": safe_int(sales_7_days),
+            "sales_30_days": safe_int(sales_30_days),
             "event": f"Order changed to {status}"
         })
 
@@ -305,6 +399,10 @@ def update_order_status(
             "order_quantity": safe_int(order_quantity),
             "processed": bool(processed),
             "future_demand": demand,
+            "future_demand_30": safe_int(future_demand_30),
+            "daily_sales": safe_int(daily_sales),
+            "sales_7_days": safe_int(sales_7_days),
+            "sales_30_days": safe_int(sales_30_days),
 
             "inventory_level": inventory_level,
             "inventory_level_description": str(inventory_level_description),

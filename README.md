@@ -1,15 +1,23 @@
 # Smart Logistics System
 
-Hệ thống theo dõi trạng thái đơn hàng, dự báo nhu cầu và cập nhật tồn kho gần thời gian thực.
+Hệ thống theo dõi trạng thái đơn hàng, dự báo nhu cầu và cập nhật tồn kho theo thời gian thực.
 
-## Chức năng chính
+## Cấu trúc
 
-- Theo dõi trạng thái: Pending, Processing, Shipping, Delivered và Cancelled.
-- Dự báo nhu cầu bằng Random Forest Regression.
-- Tính Reorder Point và số lượng cần nhập.
-- Phân loại tồn kho: NORMAL, LOW, CRITICAL và OUT_OF_STOCK.
-- Lưu dữ liệu trên Firebase Realtime Database.
-- Hiển thị kết quả trên Dashboard bằng Server Sync.
+```text
+app/                    Backend và nghiệp vụ
+  server.py             Flask API
+  inventory_service.py Quy tắc tồn kho
+  ai/predictor.py       Load model và dự báo
+  firebase/             Cấu hình, truy cập Firebase
+ml/                     Tải, xử lý, train và đánh giá dữ liệu
+scripts/simulate.py     Mô phỏng dữ liệu
+tests/                  Kiểm thử
+templates/              HTML
+static/css, static/js   Giao diện
+data/                   Dữ liệu raw và processed
+models/                 Model Random Forest
+```
 
 ## Cài đặt
 
@@ -19,43 +27,42 @@ py -m venv .venv
 py -m pip install -r requirements.txt
 ```
 
-## Cấu hình Firebase
+## Firebase
 
-Tải khóa Firebase Admin của dự án và đặt trong thư mục mã nguồn. Mặc định chương trình tìm:
+Local dùng `serviceAccountKey.json`. Render dùng:
 
 ```text
-smart-logistics-system-75a42-a699f876beef.json
+FIREBASE_DATABASE_URL
+FIREBASE_CREDENTIAL_JSON
 ```
 
-Không commit hoặc chia sẻ khóa Firebase lên GitHub.
+Không commit khóa Firebase lên GitHub.
 
-## Chạy chương trình
-
-Tải và chuẩn hóa dữ liệu Kaggle, sau đó huấn luyện mô hình:
+## Dữ liệu và Random Forest
 
 ```powershell
-py download_kaggle_data.py
-py prepare_kaggle_data.py
-py train_model.py
+python -m ml.download_data
+python -m ml.prepare_data
+python -m ml.train
+python -m ml.evaluate
 ```
 
-Terminal 1:
+## Chạy web
 
 ```powershell
-py websocket_server.py
+python -m app.server
 ```
 
 Mở `http://127.0.0.1:8000`.
 
-Terminal 2:
+## Chạy mô phỏng
 
 ```powershell
-py main.py
+python -m scripts.simulate
 ```
 
-## Đóng góp
+## Kiểm thử
 
-1. Fork repository.
-2. Tạo branch mới.
-3. Commit thay đổi.
-4. Mở Pull Request để cùng review và chỉnh sửa.
+```powershell
+python -m tests.test_random_forest
+```

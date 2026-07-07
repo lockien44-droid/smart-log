@@ -4,19 +4,22 @@ from werkzeug.exceptions import HTTPException
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 from firebase_admin import db
 
-from inventory_manager import evaluate_inventory
-from predictor import get_model_info, predict_demand
+from app.inventory_service import evaluate_inventory
+from app.ai.predictor import get_model_info, predict_demand
 
 FIREBASE_IMPORT_ERROR = None
 try:
-    from firebase_manager import (
+    from app.firebase.repository import (
         add_product_stock,
         deduct_product_stock,
         get_all_orders,
         get_order,
+        get_product_data,
         get_product_stock,
+        rename_product_location,
         set_product_stock,
         update_order_status,
         update_product_inventory_analysis,
@@ -27,13 +30,20 @@ except Exception as error:
     deduct_product_stock = None
     get_all_orders = None
     get_order = None
+    get_product_data = None
     get_product_stock = None
+    rename_product_location = None
     set_product_stock = None
     update_order_status = None
     update_product_inventory_analysis = None
     print("[FIREBASE] Initialization failed:", FIREBASE_IMPORT_ERROR)
 
-app = Flask(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+app = Flask(
+    __name__,
+    template_folder=str(PROJECT_ROOT / "templates"),
+    static_folder=str(PROJECT_ROOT / "static"),
+)
 app.config["SECRET_KEY"] = "smartlogistics"
 
 
@@ -170,6 +180,63 @@ def model_info():
     return jsonify(get_model_info())
 
 
+def schedule_delivery_status_flow(order_snapshot, base_logs):
+    """Demo lifecycle: Processing -> Shipping -> Delivered in 4 seconds.
+
+    Pending is written before inventory processing and lasts ~2 seconds.
+    After Processing is written, this background task moves the order to
+    Shipping after 2 more seconds and Delivered after another 2 seconds.
+    Total demo time is roughly 6 seconds from order submission.
+    """
+    def _update_later(status, progress, delay_seconds, message):
+        time.sleep(delay_seconds)
+        logs = list(base_logs) + [_log(message)]
+        update_order_status(
+            order_id=order_snapshot["order_id"],
+            status=status,
+            inventory=order_snapshot["inventory"],
+            inventory_before=order_snapshot["inventory_before"],
+            demand=order_snapshot["future_demand"],
+            inventory_level=order_snapshot["inventory_level"],
+            warehouse_id=order_snapshot["warehouse_id"],
+            product_id=order_snapshot["product_id"],
+            order_quantity=order_snapshot["order_quantity"],
+            reorder_point=order_snapshot["reorder_point"],
+            reorder_quantity=order_snapshot["reorder_quantity"],
+            reorder_required=order_snapshot["reorder_required"],
+            alert=order_snapshot["alert"],
+            progress=progress,
+            inventory_level_description=order_snapshot[
+                "inventory_level_description"
+            ],
+            processing_logs=logs,
+            processing_latency_ms=order_snapshot["processing_latency_ms"],
+            prediction_latency_ms=order_snapshot["prediction_latency_ms"],
+            model_mode=order_snapshot["model_mode"],
+            model_version=order_snapshot["model_version"],
+            fallback_used=order_snapshot["fallback_used"],
+            prediction_error=order_snapshot.get("prediction_error"),
+            server_completed_at_ms=round(time.time() * 1000),
+            future_demand_30=order_snapshot["future_demand_30"],
+            daily_sales=order_snapshot["daily_sales"],
+            sales_7_days=order_snapshot["sales_7_days"],
+            sales_30_days=order_snapshot["sales_30_days"],
+        )
+
+    _update_later(
+        status="Shipping",
+        progress=65,
+        delay_seconds=2,
+        message="Đơn hàng chuyển sang Shipping",
+    )
+    _update_later(
+        status="Delivered",
+        progress=100,
+        delay_seconds=2,
+        message="Đơn hàng đã Delivered",
+    )
+
+
 @app.route("/api/orders/process", methods=["POST"])
 def process_order():
     if FIREBASE_IMPORT_ERROR or get_product_stock is None:
@@ -201,6 +268,8 @@ def process_order():
         daily_sales = max(0, int(data.get("daily_sales", 0)))
     except (TypeError, ValueError):
         daily_sales = 0
+    sales_7_days = daily_sales * 7
+    sales_30_days = daily_sales * 30
 
     initial_stock_raw = data.get("initial_stock")
     try:
@@ -253,6 +322,30 @@ def process_order():
         )
         logs.append(_log(f"Khởi tạo tồn kho = {stock_before}"))
 
+    update_order_status(
+        order_id=order_id,
+        status="Pending",
+        inventory=stock_before,
+        inventory_before=stock_before,
+        demand=0,
+        inventory_level="NORMAL",
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        order_quantity=order_quantity,
+        reorder_point=0,
+        reorder_quantity=0,
+        reorder_required=False,
+        alert="PENDING",
+        progress=10,
+        inventory_level_description="Đơn mới, chờ xử lý tồn kho",
+        processed=False,
+        processing_logs=logs + [_log("Đơn hàng ở trạng thái Pending")],
+        daily_sales=daily_sales,
+        sales_7_days=sales_7_days,
+        sales_30_days=sales_30_days,
+    )
+    time.sleep(2)
+
     model_details = get_model_info()
     prediction_started = time.perf_counter()
     prediction_result = predict_demand(
@@ -271,6 +364,7 @@ def process_order():
         0,
         round(prediction_result["future_demand"]),
     )
+    future_demand_30 = max(0, round(demand * 30 / 7))
     prediction_latency_ms = round(
         (time.perf_counter() - prediction_started) * 1000
     )
@@ -293,6 +387,42 @@ def process_order():
         )
     except ValueError as exc:
         logs.append(_log(str(exc)))
+        cancel_report = evaluate_inventory(
+            stock=stock_before,
+            future_demand=demand,
+            lead_time=lead_time,
+            warehouse_id=warehouse_id,
+        )
+        update_order_status(
+            order_id=order_id,
+            status="Cancelled",
+            inventory=stock_before,
+            inventory_before=stock_before,
+            demand=demand,
+            inventory_level=cancel_report["inventory_level"],
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            order_quantity=order_quantity,
+            reorder_point=cancel_report["reorder_point"],
+            reorder_quantity=cancel_report["reorder_quantity"],
+            reorder_required=True,
+            alert="INSUFFICIENT_STOCK",
+            progress=0,
+            inventory_level_description=cancel_report[
+                "inventory_level_description"
+            ],
+            processing_logs=logs + [_log("Đơn bị hủy do không đủ tồn kho")],
+            prediction_latency_ms=prediction_latency_ms,
+            model_mode=prediction_result["mode"],
+            model_version=model_details["model_version"],
+            fallback_used=prediction_result["fallback_used"],
+            prediction_error=prediction_result.get("error"),
+            server_completed_at_ms=round(time.time() * 1000),
+            future_demand_30=future_demand_30,
+            daily_sales=daily_sales,
+            sales_7_days=sales_7_days,
+            sales_30_days=sales_30_days,
+        )
         return jsonify({
             "ok": False,
             "error": str(exc),
@@ -322,6 +452,10 @@ def process_order():
         reorder_point=report["reorder_point"],
         reorder_quantity=report["reorder_quantity"],
         reorder_required=report["reorder_required"],
+        future_demand_30=future_demand_30,
+        daily_sales=daily_sales,
+        sales_7_days=sales_7_days,
+        sales_30_days=sales_30_days,
     )
 
     logs.append(_log("Gửi dữ liệu lên Firebase"))
@@ -332,6 +466,33 @@ def process_order():
     logs.append(_log(
         f"Backend hoàn tất trong {processing_latency_ms} ms"
     ))
+    order_snapshot = {
+        "order_id": order_id,
+        "warehouse_id": warehouse_id,
+        "product_id": product_id,
+        "inventory_before": stock_before,
+        "order_quantity": order_quantity,
+        "inventory": stock_after,
+        "future_demand": demand,
+        "future_demand_30": future_demand_30,
+        "daily_sales": daily_sales,
+        "sales_7_days": sales_7_days,
+        "sales_30_days": sales_30_days,
+        "inventory_level": level,
+        "inventory_level_description": report[
+            "inventory_level_description"
+        ],
+        "reorder_point": report["reorder_point"],
+        "reorder_quantity": report["reorder_quantity"],
+        "reorder_required": report["reorder_required"],
+        "alert": alert,
+        "processing_latency_ms": processing_latency_ms,
+        "prediction_latency_ms": prediction_latency_ms,
+        "model_mode": prediction_result["mode"],
+        "model_version": model_details["model_version"],
+        "fallback_used": prediction_result["fallback_used"],
+        "prediction_error": prediction_result.get("error"),
+    }
     update_order_status(
         order_id=order_id,
         status="Processing",
@@ -358,6 +519,15 @@ def process_order():
         fallback_used=prediction_result["fallback_used"],
         prediction_error=prediction_result.get("error"),
         server_completed_at_ms=server_completed_at_ms,
+        future_demand_30=future_demand_30,
+        daily_sales=daily_sales,
+        sales_7_days=sales_7_days,
+        sales_30_days=sales_30_days,
+    )
+    socketio.start_background_task(
+        schedule_delivery_status_flow,
+        order_snapshot,
+        logs,
     )
 
     return jsonify({
@@ -370,6 +540,10 @@ def process_order():
             "order_quantity": order_quantity,
             "inventory": stock_after,
             "future_demand": demand,
+            "future_demand_30": future_demand_30,
+            "daily_sales": daily_sales,
+            "sales_7_days": sales_7_days,
+            "sales_30_days": sales_30_days,
             "inventory_level": level,
             "reorder_point": report["reorder_point"],
             "reorder_quantity": report["reorder_quantity"],
@@ -437,6 +611,10 @@ def create_product():
         reorder_point=report["reorder_point"],
         reorder_quantity=report["reorder_quantity"],
         reorder_required=report["reorder_required"],
+        future_demand_30=0,
+        daily_sales=0,
+        sales_7_days=0,
+        sales_30_days=0,
     )
     return jsonify({
         "ok": True,
@@ -447,6 +625,130 @@ def create_product():
             "inventory_level": report["inventory_level"],
         },
     })
+
+
+@app.route("/api/inventory/restock", methods=["POST"])
+def restock_product():
+    if FIREBASE_IMPORT_ERROR or get_product_stock is None:
+        return jsonify({
+            "ok": False,
+            "error": "Firebase chưa khởi tạo được trên backend.",
+            "detail": FIREBASE_IMPORT_ERROR,
+        }), 503
+
+    data = request.get_json(silent=True) or {}
+    warehouse_id = str(data.get("warehouse_id", "")).strip()
+    product_id = str(data.get("product_id", "")).strip()
+
+    try:
+        restock_quantity = int(data.get("restock_quantity", 0))
+    except (TypeError, ValueError):
+        restock_quantity = 0
+
+    errors = {}
+    if not warehouse_id:
+        errors["warehouse_id"] = "Không được để trống mã kho."
+    if not product_id:
+        errors["product_id"] = "Không được để trống mã sản phẩm."
+    if restock_quantity <= 0:
+        errors["restock_quantity"] = "Số lượng nhập thêm phải lớn hơn 0."
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
+
+    product_data = get_product_data(warehouse_id, product_id)
+    if not product_data:
+        return jsonify({
+            "ok": False,
+            "error": (
+                f"Chưa tìm thấy SKU {product_id} trong kho {warehouse_id}. "
+                "Hãy dùng chức năng Thêm sản phẩm trước."
+            ),
+        }), 404
+
+    stock_before = get_product_stock(warehouse_id, product_id)
+    stock_after = add_product_stock(
+        warehouse_id,
+        product_id,
+        restock_quantity,
+    )
+    future_demand = int(product_data.get("future_demand") or 0)
+    report = evaluate_inventory(
+        stock=stock_after,
+        future_demand=future_demand,
+        warehouse_id=warehouse_id,
+    )
+    update_product_inventory_analysis(
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        future_demand=future_demand,
+        inventory_level=report["inventory_level"],
+        reorder_point=report["reorder_point"],
+        reorder_quantity=report["reorder_quantity"],
+        reorder_required=report["reorder_required"],
+    )
+
+    return jsonify({
+        "ok": True,
+        "restock": {
+            "warehouse_id": warehouse_id,
+            "product_id": product_id,
+            "stock_before": stock_before,
+            "restock_quantity": restock_quantity,
+            "stock_after": stock_after,
+            "future_demand": future_demand,
+            "inventory_level": report["inventory_level"],
+            "inventory_level_description": report[
+                "inventory_level_description"
+            ],
+            "reorder_point": report["reorder_point"],
+            "reorder_quantity": report["reorder_quantity"],
+        },
+    })
+
+
+@app.route("/api/products/rename", methods=["POST"])
+def rename_product():
+    if FIREBASE_IMPORT_ERROR or rename_product_location is None:
+        return jsonify({
+            "ok": False,
+            "error": "Firebase chưa sẵn sàng để sửa thông tin kho/sản phẩm.",
+            "detail": FIREBASE_IMPORT_ERROR,
+        }), 503
+
+    data = request.get_json(silent=True) or {}
+    old_warehouse_id = str(data.get("old_warehouse_id", "")).strip()
+    old_product_id = str(data.get("old_product_id", "")).strip()
+    new_warehouse_id = str(data.get("new_warehouse_id", "")).strip()
+    new_product_id = str(data.get("new_product_id", "")).strip()
+
+    errors = {}
+    if not old_warehouse_id:
+        errors["old_warehouse_id"] = "Thiếu mã kho cũ."
+    if not old_product_id:
+        errors["old_product_id"] = "Thiếu mã sản phẩm cũ."
+    if not new_warehouse_id:
+        errors["new_warehouse_id"] = "Không được để trống mã kho mới."
+    if not new_product_id:
+        errors["new_product_id"] = "Không được để trống mã sản phẩm mới."
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
+
+    try:
+        result = rename_product_location(
+            old_warehouse_id,
+            old_product_id,
+            new_warehouse_id,
+            new_product_id,
+        )
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    except Exception as error:
+        return jsonify({
+            "ok": False,
+            "error": f"Backend sửa kho/sản phẩm thất bại: {error}",
+        }), 500
+
+    return jsonify({"ok": True, "product": result})
 
 
 # =========================

@@ -1,9 +1,11 @@
 import os
+from pathlib import Path
 import joblib
 import pandas as pd
 from datetime import datetime
 
-MODEL_PATH = "models/random_forest_model.pkl"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODEL_PATH = PROJECT_ROOT / "models" / "random_forest_model.pkl"
 
 model = None
 MODEL_METADATA = {}
@@ -405,7 +407,7 @@ def get_model_info():
         "mae": metrics.get("mae"),
         "rmse": metrics.get("rmse"),
         "r2": metrics.get("r2"),
-        "model_file": MODEL_PATH,
+        "model_file": str(MODEL_PATH),
         "model_version": MODEL_METADATA.get(
             "model_version",
             f"rf-{MODEL_METADATA.get('cutoff_date', 'unknown')}"

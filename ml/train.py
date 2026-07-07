@@ -9,9 +9,10 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
-from prepare_kaggle_data import OUTPUT_FILE, prepare_dataset
+from ml.prepare_data import OUTPUT_FILE, prepare_dataset
 
-MODEL_PATH = Path("models/random_forest_model.pkl")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MODEL_PATH = PROJECT_ROOT / "models" / "random_forest_model.pkl"
 FORECAST_HORIZON_DAYS = 7
 
 CATEGORICAL_FEATURES = [

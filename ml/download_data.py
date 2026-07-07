@@ -7,7 +7,8 @@ DATASET_HANDLE = (
     "talhanazir168/"
     "store-inventory-demand-forecasting-dataset"
 )
-RAW_DATA_DIR = Path("data/raw/kaggle_demand")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw" / "kaggle_demand"
 
 
 def download_dataset():
