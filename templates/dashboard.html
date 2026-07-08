@@ -6,110 +6,50 @@
     <title>Smart Logistics Dashboard</title>
 
     
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=breadcrumb-menu-20260708">
 </head>
 <body>
 
 <div class="app-shell">
     <aside class="sidebar">
         <div class="brand">SMART LOGISTICS<small>Inventory Management</small></div>
-        <div id="dashboardNav" class="nav-item active">Trang chủ</div>
+        <div id="dashboardNav" class="nav-item active nav-home">Trang chủ</div>
         <div class="menu-group">
             <div id="orderManagementNav" class="menu-parent">
                 <span class="menu-parent-left">Quản lý đơn hàng</span>
-                <span class="chevron"></span>
+            </div>
+        </div>
+        <div class="menu-group">
+            <div id="productMenuToggle" class="menu-parent">
+                <span class="menu-parent-left">Quản lý sản phẩm</span>
+                <span class="chevron">&rsaquo;</span>
+            </div>
+            <div id="productSubmenu" class="submenu">
+                <div id="allProductsNav" class="nav-item">Tất cả sản phẩm</div>
+                <div id="addProductNav" class="nav-item">Thêm / Nhập hàng</div>
+                <div id="orderDetailsNav" class="nav-item">Chi tiết đơn hàng</div>
+                <div id="inventoryNav" class="nav-item">Quản lý tồn kho</div>
             </div>
         </div>
         <div class="menu-group">
             <div id="forecastNav" class="menu-parent">
                 <span class="menu-parent-left">Dự báo nhu cầu</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div id="productMenuToggle" class="menu-parent">
-                <span class="menu-parent-left">Quản Lý Sản Phẩm</span>
-                <span class="chevron"></span>
-            </div>
-            <div id="productSubmenu" class="submenu">
-                <div id="allProductsNav" class="nav-item">Tất Cả Sản Phẩm</div>
-                <div id="addProductNav" class="nav-item">Thêm Sản Phẩm</div>
-                <div id="orderDetailsNav" class="nav-item">Chi tiết đơn hàng</div>
-                <div id="inventoryNav" class="nav-item">Quản Lý Tồn Kho</div>
-                <div id="restockNav" class="nav-item">Nhập thêm hàng</div>
             </div>
         </div>
         <div id="alertNav" class="nav-item">Cảnh báo tồn kho</div>
         <div id="historyNav" class="nav-item">Lịch sử đồng bộ</div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Kênh Marketing</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Quản lý khách hàng</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Tài Chính</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Dữ Liệu</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Phát Triển</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Chăm sóc khách hàng</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">SBS</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Quản Lý Shop</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
-        <div class="menu-group">
-            <div class="menu-parent">
-                <span class="menu-parent-left">Thiết Lập Shop</span>
-                <span class="chevron"></span>
-            </div>
-        </div>
     </aside>
     <main class="main-content">
     <div class="topbar">
-        <div class="breadcrumb">
+        <div class="breadcrumb" id="breadcrumbPath">
             <span class="breadcrumb-logo">S</span>
             <span id="breadcrumbCurrent" class="breadcrumb-current">Trang chủ</span>
         </div>
         <div class="topbar-actions">
-            <span class="topbar-icon" title="Trung tâm thông báo">🏪</span>
-            <span class="topbar-icon" title="Ứng dụng">▦</span>
+            <span class="topbar-icon" title="Trung tâm thông báo">&#127970;</span>
+            <span class="topbar-icon" title="Ứng dụng">&#9638;</span>
             <span id="pushWrapper" class="push-wrapper">
-                <span id="pushNotificationIcon" class="topbar-icon" title="Thông báo đẩy">
-                    
-                    <span id="pushNotificationBadge" class="push-badge">0</span>
-                </span>
+                <span id="pushNotificationIcon" class="topbar-icon" title="Thông báo đẩy">&#128276;<span id="pushNotificationBadge" class="push-badge">0</span></span>
                 <div id="pushDropdown" class="push-dropdown">
                     <div class="push-dropdown-title">Thông Báo Mới Nhận</div>
                     <div id="pushFilterTabs" class="push-filter-tabs">
@@ -147,44 +87,48 @@
         </div>
     </div>
 
-    <div id="orderFormSection" class="demo-grid feature-hidden">
-        <div class="panel">
-            <div class="section-heading">
-                <h3>Tạo đơn hàng realtime</h3>
-                <span>Random Forest  Firebase  Dashboard</span>
+    <div id="inventoryOverviewSection" class="panel overview-panel inventory-overview-panel feature-hidden">
+        <div class="section-heading">
+            <div>
+                <h3>Tổng quan tồn kho</h3>
+                <span>Nắm nhanh tình trạng hàng hóa trên toàn bộ kho</span>
             </div>
-            <form id="newOrderForm" class="order-form">
-                <div class="form-group"><label>Mã đơn hàng</label><input id="formOrderId" required placeholder="DEMO_001"></div>
-                <div class="form-group"><label>Mã sản phẩm / SKU</label><input id="formProductId" required placeholder="PRD001"></div>
-                <div class="form-group"><label>Mã kho</label><input id="formWarehouseId" required placeholder="WH01"></div>
-                <div class="form-group"><label>Số lượng đặt</label><input id="formOrderQuantity" type="number" min="1" required value="15"></div>
-                <div class="form-group"><label>Lead time (ngày)</label><input id="formLeadTime" type="number" min="1" step="1" required value="3"></div>
-                <div class="form-group"><label>Ngày đặt hàng</label><input id="formOrderDate" type="date" required></div>
-                <div class="form-group"><label>Doanh số/ngày</label><input id="formDailySales" type="number" min="0" value="20"></div>
-                <div class="form-group"><label>Tồn ban đầu nếu SKU mới</label><input id="formInitialStock" type="number" min="0" placeholder="Ví dụ: 320"></div>
-                <div class="form-actions">
-                    <button id="submitOrderBtn" type="submit">Chạy dự báo / Tạo đơn hàng</button>
-                    <span id="formMessage" class="form-message">Nhập dữ liệu để bắt đầu demo.</span>
-                </div>
-            </form>
-        </div>
-        <div class="panel">
-            <div class="section-heading">
-                <h3>Kết quả xử lý</h3>
-                <span>AI dự báo và logic tồn kho</span>
-            </div>
-            <div class="prediction-result">
-                <div class="result-box"><span>Tồn kho hiện tại</span><strong id="resultBefore">-</strong></div>
-                <div class="result-box"><span>Số lượng đặt</span><strong id="resultQuantity">-</strong></div>
-                <div class="result-box"><span>Dự báo nhu cầu 7 ngày</span><strong id="resultDemand7">-</strong></div>
-                <div class="result-box"><span>Dự báo nhu cầu 30 ngày</span><strong id="resultDemand30">-</strong></div>
-                <div class="result-box"><span>Tồn kho sau xử lý</span><strong id="resultAfter">-</strong></div>
-                <div class="result-box"><span>Reorder Point</span><strong id="resultRop">-</strong></div>
-                <div class="result-box"><span>Cần nhập thêm</span><strong id="resultReorder">-</strong></div>
-                <div class="result-box"><span>Mức tồn kho</span><strong id="resultLevel">-</strong></div>
-                <div class="result-box"><span>Cảnh báo</span><strong id="resultAlert">-</strong></div>
+            <div class="overview-meta inventory-sync-meta feature-hidden">
+                <span>🔥 Firebase: <strong id="inventoryFirebaseConnection">Đang kết nối</strong></span>
+                <span> Nodes: <strong>orders + warehouses</strong></span>
+                <span>🔄 Đồng bộ: <strong id="inventoryLastSyncTime">--:--:--</strong></span>
+                <span>🕒 Dữ liệu mới nhất: <strong id="inventoryLatestDataTime">Chưa có</strong></span>
+                <span>⚡ Đồng bộ: <strong>Firebase onValue</strong></span>
             </div>
         </div>
+        <div class="stats">
+            <div class="stat-card"><h2 id="inventoryTotalTracked">0</h2><p>Tổng SKU/đơn theo dõi</p></div>
+            <div class="stat-card"><h2 id="inventoryNormalStock">0</h2><p>Tồn kho bình thường</p></div>
+            <div class="stat-card"><h2 id="inventoryLowStock">0</h2><p>Sắp hết hàng</p></div>
+            <div class="stat-card"><h2 id="inventoryCriticalStock">0</h2><p>Tồn kho nguy cấp</p></div>
+            <div class="stat-card"><h2 id="inventoryOutStock">0</h2><p>Đã hết hàng</p></div>
+            <div class="stat-card"><h2 id="inventoryReorderStock">0</h2><p>Cần bổ sung hàng</p></div>
+        </div>
+    </div>
+
+    <div id="orderFormSection" class="panel feature-hidden" style="margin-bottom:15px">
+        <div class="section-heading">
+            <h3>Tạo đơn hàng</h3>
+            <span>Random Forest Firebase Dashboard</span>
+        </div>
+        <form id="newOrderForm" class="order-form">
+            <div class="form-group"><label>Mã đơn hàng</label><input id="formOrderId" placeholder="Để trống để tự tạo mã đơn"></div>
+            <div class="form-group"><label>Sản phẩm</label><select id="formProductId" class="filter-control" required><option value="">Chọn kho trước</option></select></div>
+            <div class="form-group"><label>Kho</label><select id="formWarehouseId" class="filter-control" required><option value="">Đang tải danh sách kho...</option></select></div>
+            <div class="form-group"><label>Số lượng đặt</label><input id="formOrderQuantity" type="number" min="1" required value="15"></div>
+            <div class="form-group"><label>Lead time (ngày)</label><input id="formLeadTime" type="number" min="1" step="1" required value="3"></div>
+            <div class="form-group"><label>Ngày đặt hàng</label><input id="formOrderDate" type="date" required></div>
+            <div class="form-group"><label>Sản phẩm / Ngày</label><input id="formDailySales" type="number" min="0" value="20"></div>
+            <div class="form-actions">
+                <button id="submitOrderBtn" type="submit">Tạo đơn hàng</button>
+                <span id="formMessage" class="form-message">Chọn kho, sản phẩm và số lượng để tạo đơn hàng.</span>
+            </div>
+        </form>
     </div>
 
     <div id="modelSection" class="panel feature-hidden" style="margin-bottom:15px">
@@ -239,8 +183,8 @@
             <span>Bổ sung hàng cho SKU đã tồn tại, cập nhật Firebase realtime</span>
         </div>
         <form id="restockForm" class="order-form">
-            <div class="form-group"><label>Mã kho</label><input id="restockWarehouse" required placeholder="WH01"></div>
-            <div class="form-group"><label>Mã sản phẩm / SKU</label><input id="restockProductId" required placeholder="SKU001"></div>
+            <div class="form-group"><label>Mã kho</label><select id="restockWarehouse" class="filter-control" required><option value="">Đang tải danh sách kho...</option></select></div>
+            <div class="form-group"><label>Mã sản phẩm / SKU</label><select id="restockProductId" class="filter-control" required><option value="">Chọn kho trước</option></select></div>
             <div class="form-group"><label>Số lượng nhập thêm</label><input id="restockQuantity" type="number" min="1" required value="100"></div>
             <div class="form-actions">
                 <button id="restockBtn" type="submit">Nhập thêm hàng</button>
@@ -415,7 +359,7 @@
 </main>
 </div>
 <div id="toastContainer"></div>
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}?v=realtime-last-10-20260708"></script>
 <script type="module">
 import { initializeApp } from
     "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";

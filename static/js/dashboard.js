@@ -14,6 +14,7 @@ let stockAlertsEnabled =
 let pushNotificationFilter = "ALL";
 let currentNotificationAlerts = [];
 let warehouseSortMode = "latest";
+let selectedOrderDetailId = null;
 const readNotificationKeys = new Set(
     JSON.parse(localStorage.getItem("readNotificationKeys") || "[]")
 );
@@ -22,6 +23,7 @@ const dashboardNav = document.getElementById("dashboardNav");
 const inventoryNav = document.getElementById("inventoryNav");
 const orderDetailsNav = document.getElementById("orderDetailsNav");
 const breadcrumbCurrent = document.getElementById("breadcrumbCurrent");
+const breadcrumbPath = document.getElementById("breadcrumbPath");
 const overviewView = document.getElementById("overviewView");
 const inventoryView = document.getElementById("inventoryView");
 const orderDetailsView = document.getElementById("orderDetailsView");
@@ -34,6 +36,30 @@ const addProductNav = document.getElementById("addProductNav");
 const restockNav = document.getElementById("restockNav");
 const alertNav = document.getElementById("alertNav");
 const historyNav = document.getElementById("historyNav");
+
+function setBreadcrumb(path) {
+    const home = "Trang chủ";
+    const parts = Array.isArray(path) ? path : [home, path];
+    const normalizedParts =
+        parts.length === 1 || parts[parts.length - 1] === home
+            ? [home]
+            : parts;
+
+    if (!breadcrumbPath) return;
+    breadcrumbPath.innerHTML = '<span class="breadcrumb-logo">S</span>';
+    normalizedParts.forEach((part, index) => {
+        if (index > 0) {
+            const separator = document.createElement("span");
+            separator.className = "breadcrumb-separator";
+            separator.textContent = ">";
+            breadcrumbPath.appendChild(separator);
+        }
+        const item = document.createElement("span");
+        item.className = "breadcrumb-link";
+        item.textContent = part;
+        breadcrumbPath.appendChild(item);
+    });
+}
 
 function showMenuView(activeNav, activeView) {
     [overviewView, inventoryView, orderDetailsView].forEach(view =>
@@ -52,12 +78,13 @@ dashboardNav.addEventListener("click", () => {
     );
     showDashboardPage();
     dashboardNav.classList.add("active");
-    breadcrumbCurrent.textContent = "Trang chủ";
+    setBreadcrumb(["Trang chủ"]);
     window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
 const featureSectionIds = [
     "overviewSection",
+    "inventoryOverviewSection",
     "orderFormSection",
     "salesAnalysisSection",
     "displayServiceSection",
@@ -104,12 +131,12 @@ function activateMenu(element, breadcrumb, sectionIds) {
     element.classList.add("active");
     const sections = Array.isArray(sectionIds) ? sectionIds : [sectionIds];
     showSections(sections);
-    breadcrumbCurrent.textContent = breadcrumb;
+    setBreadcrumb(breadcrumb);
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 window.openAlertNotification = orderId => {
-    activateMenu(alertNav, "Cảnh báo tồn kho", "alertsSection");
+    activateMenu(alertNav, ["Trang chủ", "Cảnh báo tồn kho"], "alertsSection");
     document.getElementById("pushWrapper").classList.remove("open");
 
     setTimeout(() => {
@@ -131,82 +158,48 @@ window.openAlertNotification = orderId => {
 };
 
 orderManagementNav.addEventListener("click", () => {
-    activateMenu(
-        orderManagementNav,
-        "Quản lý đơn hàng",
-        ["orderFormSection", "orderListSection"]
-    );
+    activateMenu(orderManagementNav, ["Trang chủ", "Quản lý đơn hàng"], ["orderFormSection", "orderListSection"]);
 });
 
 forecastNav.addEventListener("click", () => {
-    activateMenu(
-        forecastNav,
-        "Dự báo nhu cầu",
-        ["modelSection", "chartsSection"]
-    );
+    activateMenu(forecastNav, ["Trang chủ", "Dự báo nhu cầu"], ["modelSection", "chartsSection"]);
 });
 
 productMenuToggle.addEventListener("click", () => {
     productSubmenu.classList.toggle("collapsed");
-    productMenuToggle.querySelector(".chevron").textContent =
-        productSubmenu.classList.contains("collapsed") ? "" : "";
+    productMenuToggle.querySelector(".chevron").textContent = productSubmenu.classList.contains("collapsed") ? ">" : "v";
 });
 
 allProductsNav.addEventListener("click", () => {
-    activateMenu(
-        allProductsNav,
-        "Tt c sn phm",
-        "warehouseInventorySection"
-    );
+    activateMenu(allProductsNav, ["Trang chủ", "Quản lý sản phẩm", "Tất cả sản phẩm"], "warehouseInventorySection");
 });
 
 addProductNav.addEventListener("click", () => {
-    activateMenu(
-        addProductNav,
-        "Thêm sản phẩm",
-        "addProductSection"
-    );
+    activateMenu(addProductNav, ["Trang chủ", "Quản lý sản phẩm", "Thêm / Nhập hàng"], ["addProductSection", "restockSection"]);
     document.getElementById("newProductId").focus();
 });
 
-restockNav.addEventListener("click", () => {
-    activateMenu(
-        restockNav,
-        "Nhập thêm hàng",
-        "restockSection"
-    );
+restockNav?.addEventListener("click", () => {
+    activateMenu(restockNav, ["Trang chủ", "Quản lý sản phẩm", "Thêm / Nhập hàng"], "restockSection");
     document.getElementById("restockProductId").focus();
 });
 
 alertNav.addEventListener("click", event => {
     event.stopPropagation();
-    activateMenu(
-        alertNav,
-        "Cảnh báo tồn kho",
-        "alertsSection"
-    );
+    activateMenu(alertNav, ["Trang chủ", "Cảnh báo tồn kho"], "alertsSection");
     document.getElementById("pushWrapper").classList.remove("open");
 });
 
 historyNav.addEventListener("click", () => {
-    activateMenu(
-        historyNav,
-        "Lịch sử đồng bộ",
-        "realtimeLogSection"
-    );
+    activateMenu(historyNav, ["Trang chủ", "Lịch sử đồng bộ"], "realtimeLogSection");
 });
 
 inventoryNav.addEventListener("click", () => {
-    activateMenu(
-        inventoryNav,
-        "Quản lý tồn kho",
-        ["overviewSection", "orderListSection", "warehouseInventorySection"]
-    );
+    activateMenu(inventoryNav, ["Trang chủ", "Quản lý sản phẩm", "Quản lý tồn kho"], ["inventoryOverviewSection", "orderListSection", "warehouseInventorySection"]);
 });
 
 orderDetailsNav.addEventListener("click", () => {
-    showMenuView(orderDetailsNav, orderDetailsView);
-    breadcrumbCurrent.textContent = "Chi tit n hng";
+    showOrderDetailsList();
 });
 
 document.getElementById("pushNotificationIcon").addEventListener("click", event => {
@@ -357,11 +350,18 @@ window.applyFirebaseOrders = data => {
     renderStockLevelChart(Object.values(latestFirebaseOrders));
     renderLatestRealtimeLog(Object.values(latestFirebaseOrders));
     renderAlertsPage(Object.values(latestFirebaseOrders));
-    document.getElementById("lastSyncTime").textContent =
-        new Date().toLocaleTimeString("vi-VN");
-    document.getElementById("firebaseConnection").textContent = "Connected";
-    document.getElementById("firebaseConnection").className =
-        "firebase-connected";
+    const syncTime = new Date().toLocaleTimeString("vi-VN");
+    ["lastSyncTime", "inventoryLastSyncTime"].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = syncTime;
+    });
+    ["firebaseConnection", "inventoryFirebaseConnection"].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = "Connected";
+            element.className = "firebase-connected";
+        }
+    });
     document.getElementById("realtimeStatus").innerHTML =
         " Đang đồng bộ trực tiếp qua Firebase onValue";
 };
@@ -393,10 +393,13 @@ window.handleFirebaseError = error => {
     console.error("Firebase onValue failed:", error);
     document.getElementById("realtimeStatus").innerHTML =
         '<span style="color:#ef4444"> Firebase mt kt ni</span>';
-    document.getElementById("firebaseConnection").textContent =
-        "Disconnected";
-    document.getElementById("firebaseConnection").className =
-        "firebase-error";
+    ["firebaseConnection", "inventoryFirebaseConnection"].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = "Disconnected";
+            element.className = "firebase-error";
+        }
+    });
 };
 
 window.applyFirebaseWarehouses = data => {
@@ -404,6 +407,8 @@ window.applyFirebaseWarehouses = data => {
     renderWarehouseInventory(realtimeWarehouses);
     renderStockForecastChart(realtimeWarehouses);
     renderSalesAnalysis(Object.values(realtimeOrders || {}), realtimeWarehouses);
+    renderOrderWarehouseOptions(realtimeWarehouses);
+    renderRestockWarehouseOptions(realtimeWarehouses);
 };
 
 function renderStockLevelChart(orders) {
@@ -444,6 +449,104 @@ function flattenWarehouseProducts(data) {
         });
     });
     return rows;
+}
+
+function renderRestockWarehouseOptions(data) {
+    const warehouseSelect = document.getElementById("restockWarehouse");
+    const productSelect = document.getElementById("restockProductId");
+    if (!warehouseSelect || !productSelect) return;
+
+    const currentWarehouse = warehouseSelect.value;
+    const warehouses = Object.keys(data || {}).sort((a, b) =>
+        String(a).localeCompare(String(b), "vi", { numeric: true })
+    );
+
+    warehouseSelect.innerHTML = warehouses.length
+        ? '<option value="">Chọn kho</option>' + warehouses.map(warehouse =>
+            `<option value="${escapeAttribute(warehouse)}">${warehouse}</option>`
+        ).join("")
+        : '<option value="">Chưa có kho</option>';
+
+    if (warehouses.includes(currentWarehouse)) {
+        warehouseSelect.value = currentWarehouse;
+    } else if (warehouses.length) {
+        warehouseSelect.value = warehouses[0];
+    }
+
+    renderRestockProductOptions();
+}
+
+function renderOrderWarehouseOptions(data) {
+    const warehouseSelect = document.getElementById("formWarehouseId");
+    const productSelect = document.getElementById("formProductId");
+    if (!warehouseSelect || !productSelect) return;
+
+    const currentWarehouse = warehouseSelect.value;
+    const warehouses = Object.keys(data || {}).sort((a, b) =>
+        String(a).localeCompare(String(b), "vi", { numeric: true })
+    );
+
+    warehouseSelect.innerHTML = warehouses.length
+        ? '<option value="">Chọn kho</option>' + warehouses.map(warehouse =>
+            `<option value="${escapeAttribute(warehouse)}">${warehouse}</option>`
+        ).join("")
+        : '<option value="">Chưa có kho</option>';
+
+    if (warehouses.includes(currentWarehouse)) {
+        warehouseSelect.value = currentWarehouse;
+    } else if (warehouses.length) {
+        warehouseSelect.value = warehouses[0];
+    }
+
+    renderOrderProductOptions();
+}
+
+function renderOrderProductOptions() {
+    const warehouseSelect = document.getElementById("formWarehouseId");
+    const productSelect = document.getElementById("formProductId");
+    if (!warehouseSelect || !productSelect) return;
+
+    const warehouseId = warehouseSelect.value;
+    const currentProduct = productSelect.value;
+    const products = Object.keys(
+        realtimeWarehouses?.[warehouseId]?.products || {}
+    ).sort((a, b) => String(a).localeCompare(String(b), "vi", { numeric: true }));
+
+    productSelect.innerHTML = products.length
+        ? '<option value="">Chọn sản phẩm</option>' + products.map(product =>
+            `<option value="${escapeAttribute(product)}">${product}</option>`
+        ).join("")
+        : '<option value="">Kho này chưa có sản phẩm</option>';
+
+    if (products.includes(currentProduct)) {
+        productSelect.value = currentProduct;
+    } else if (products.length) {
+        productSelect.value = products[0];
+    }
+}
+
+function renderRestockProductOptions() {
+    const warehouseSelect = document.getElementById("restockWarehouse");
+    const productSelect = document.getElementById("restockProductId");
+    if (!warehouseSelect || !productSelect) return;
+
+    const warehouseId = warehouseSelect.value;
+    const currentProduct = productSelect.value;
+    const products = Object.keys(
+        realtimeWarehouses?.[warehouseId]?.products || {}
+    ).sort((a, b) => String(a).localeCompare(String(b), "vi", { numeric: true }));
+
+    productSelect.innerHTML = products.length
+        ? '<option value="">Chọn sản phẩm / SKU</option>' + products.map(product =>
+            `<option value="${escapeAttribute(product)}">${product}</option>`
+        ).join("")
+        : '<option value="">Kho này chưa có SKU</option>';
+
+    if (products.includes(currentProduct)) {
+        productSelect.value = currentProduct;
+    } else if (products.length) {
+        productSelect.value = products[0];
+    }
 }
 
 function toNumber(value, fallback = 0) {
@@ -556,29 +659,36 @@ function renderStockForecastChart(data) {
 }
 
 function renderLatestRealtimeLog(orders) {
-    const latest = [...orders].sort(
-        (a, b) => Number(b.last_updated || 0) - Number(a.last_updated || 0)
-    )[0];
-    if (!latest?.processing_logs) return;
     const container = document.getElementById("realtimeLog");
+    if (!container) return;
+
+    const latestOrders = [...orders]
+        .sort((a, b) => Number(b.last_updated || 0) - Number(a.last_updated || 0))
+        .slice(0, 10);
+
+    if (!latestOrders.length) {
+        container.innerHTML =
+            '<div class="log-line">Đang chờ dữ liệu đơn hàng realtime...</div>';
+        return;
+    }
+
     container.innerHTML = "";
-    latest.processing_logs.forEach(item => {
-        const line = document.createElement("div");
-        line.className = "log-line";
-        line.textContent = `${item.time || "--:--:--"} - ${item.message || ""}`;
-        container.appendChild(line);
-    });
-    if (latest.server_completed_at_ms) {
-        const latency = Math.max(
-            0,
-            Date.now() - Number(latest.server_completed_at_ms)
-        );
+    latestOrders.forEach(order => {
+        const time = order.last_updated_text
+            ? String(order.last_updated_text).split(" ")[0]
+            : new Date(
+                  Number(order.last_updated || order.timestamp || Date.now()) *
+                      (Number(order.last_updated || order.timestamp || 0) < 1000000000000 ? 1000 : 1)
+              ).toLocaleTimeString("vi-VN");
         const line = document.createElement("div");
         line.className = "log-line";
         line.textContent =
-            `${new Date().toLocaleTimeString("vi-VN")} - Firebase onValue nhận dữ liệu (${latency} ms)`;
+            `${time} - ${order.order_id || "N/A"} | ${order.status || "N/A"} | ` +
+            `Kho ${order.warehouse_id || "N/A"} / ${order.product_id || "N/A"} | ` +
+            `Tồn ${order.inventory ?? "-"} | Dự báo ${order.future_demand ?? "-"} | ` +
+            `Cảnh báo ${order.alert || order.inventory_level || "NORMAL"}`;
         container.appendChild(line);
-    }
+    });
 }
 
 function renderWarehouseInventory(data) {
@@ -652,6 +762,39 @@ document.getElementById("warehouseSortBtn")?.addEventListener("click", () => {
     renderWarehouseInventory(realtimeWarehouses);
 });
 
+document.getElementById("restockWarehouse")?.addEventListener("change", () => {
+    renderRestockProductOptions();
+});
+
+document.getElementById("formWarehouseId")?.addEventListener("change", () => {
+    renderOrderProductOptions();
+});
+
+document.getElementById("orderTableBody")?.addEventListener("click", event => {
+    const row = event.target.closest("tr[data-order-id]");
+    if (!row) return;
+    openOrderDetail(row.dataset.orderId);
+});
+
+document.getElementById("orderTableBody")?.addEventListener("keydown", event => {
+    if (event.key !== "Enter") return;
+    const row = event.target.closest("tr[data-order-id]");
+    if (!row) return;
+    openOrderDetail(row.dataset.orderId);
+});
+
+document.getElementById("orders")?.addEventListener("click", event => {
+    const backButton = event.target.closest('[data-action="back-order-list"]');
+    if (backButton) {
+        showOrderDetailsList();
+        return;
+    }
+
+    const item = event.target.closest("[data-order-id]");
+    if (!item) return;
+    openOrderDetail(item.dataset.orderId);
+});
+
 document.addEventListener("click", async event => {
     const editButton = event.target.closest('[data-action="edit-product"]');
     if (!editButton) return;
@@ -705,8 +848,14 @@ document.addEventListener("click", async event => {
 function isWarningOrder(order) {
     const alert = String(order?.alert || "NORMAL");
     const level = String(order?.inventory_level || "NORMAL");
+    const warningAlerts = new Set([
+        "LOW_STOCK",
+        "REORDER_REQUIRED",
+        "OUT_OF_STOCK",
+        "INSUFFICIENT_STOCK"
+    ]);
     return (
-        alert !== "NORMAL" ||
+        warningAlerts.has(alert) ||
         level === "LOW" ||
         level === "CRITICAL" ||
         level === "OUT_OF_STOCK"
@@ -714,7 +863,15 @@ function isWarningOrder(order) {
 }
 
 function alertKey(order) {
-    return `${order.order_id}|${order.alert}|${order.last_updated || order.timestamp || ""}`;
+    return [
+        order.order_id || "",
+        order.warehouse_id || "",
+        order.product_id || "",
+        order.alert || "",
+        order.inventory_level || "",
+        order.inventory ?? "",
+        order.reorder_quantity ?? ""
+    ].join("|");
 }
 
 function detectNewAlerts(data) {
@@ -924,6 +1081,10 @@ function renderDashboard(data) {
                     : latestTimestamp
               ).toLocaleString("vi-VN")
             : "Chưa có";
+    const inventoryLatestElement = document.getElementById("inventoryLatestDataTime");
+    if (inventoryLatestElement) {
+        inventoryLatestElement.textContent = document.getElementById("latestDataTime").textContent;
+    }
     const warehouseFilter = document.getElementById("warehouseFilter");
     const currentWarehouse = warehouseFilter.value;
     const warehouses = [...new Set(
@@ -1029,7 +1190,7 @@ else if (
             </div>`;
 
         tableBody.innerHTML += `
-            <tr>
+            <tr class="order-row" data-order-id="${escapeAttribute(o.order_id || "")}" tabindex="0">
                 <td>${o.order_id || '-'}</td>
                 <td>${o.status || '-'}</td>
                 <td>${o.warehouse_id || '-'}</td>
@@ -1063,7 +1224,18 @@ else if (
     setText("tabLowCount", lowStock);
     setText("tabCriticalCount", criticalStock);
     setText("tabOutCount", outOfStock);
+    setText("inventoryTotalTracked", totalOrders);
+    setText("inventoryNormalStock", normalStock);
+    setText("inventoryLowStock", lowStock);
+    setText("inventoryCriticalStock", criticalStock);
+    setText("inventoryOutStock", outOfStock);
+    setText("inventoryReorderStock", reorder);
     renderNotifications(allOrders, toTimestamp);
+    if (selectedOrderDetailId) {
+        renderOrderDetail(selectedOrderDetailId);
+    } else if (!orderDetailsView.classList.contains("view-hidden")) {
+        renderOrderDetailsList();
+    }
 }
 
 function getStatusColor(status) {
@@ -1089,6 +1261,179 @@ function getReplenishmentLabel(level) {
         "OUT_OF_STOCK": " Bổ sung ngay"
     };
     return labels[level] || "N/A";
+}
+
+
+
+
+function formatDetailTime(value, fallback = "-") {
+    const timestamp = Number(value || 0);
+    if (!timestamp) return fallback;
+    return new Date(timestamp < 1000000000000 ? timestamp * 1000 : timestamp)
+        .toLocaleString("vi-VN");
+}
+
+function detailValue(value, fallback = "-") {
+    return value === undefined || value === null || value === "" ? fallback : value;
+}
+
+function orderTimestamp(order) {
+    const value = Number(order?.last_updated || order?.timestamp || 0);
+    if (Number.isFinite(value) && value > 0) return value;
+    const parsed = Date.parse(order?.last_updated_text || "");
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function openOrderDetail(orderId) {
+    if (!orderId) return;
+    selectedOrderDetailId = orderId;
+    showMenuView(orderDetailsNav, orderDetailsView);
+    setBreadcrumb(["Trang chủ", "Quản lý sản phẩm", "Chi tiết đơn hàng"]);
+    renderOrderDetail(orderId);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function showOrderDetailsList() {
+    selectedOrderDetailId = null;
+    showMenuView(orderDetailsNav, orderDetailsView);
+    setBreadcrumb(["Trang chủ", "Quản lý sản phẩm", "Chi tiết đơn hàng"]);
+    renderOrderDetailsList();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderOrderDetailsList() {
+    const container = document.getElementById("orders");
+    if (!container) return;
+
+    const orders = Object.values(latestFirebaseOrders || {})
+        .sort((a, b) => orderTimestamp(b) - orderTimestamp(a));
+
+    if (!orders.length) {
+        container.innerHTML = `
+            <div class="order-detail-empty">
+                Ch\u01b0a c\u00f3 \u0111\u01a1n h\u00e0ng \u0111\u1ec3 hi\u1ec3n th\u1ecb. H\u00e3y t\u1ea1o \u0111\u01a1n h\u00e0ng tr\u01b0\u1edbc.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="order-detail-list">
+            ${orders.map(order => {
+                const level = order.inventory_level || "NORMAL";
+                return `
+                    <button class="order-detail-list-item" type="button" data-order-id="${escapeAttribute(order.order_id || "")}">
+                        <div class="order-list-main">
+                            <strong>${escapeAttribute(order.order_id || "-")}</strong>
+                            <span>${escapeAttribute(order.warehouse_id || "-")} / ${escapeAttribute(order.product_id || "-")}</span>
+                        </div>
+                        <div class="order-list-meta">
+                            <span class="status-pill" style="color:${getStatusColor(order.status)}">${escapeAttribute(order.status || "-")}</span>
+                            <span class="level-badge level-${escapeAttribute(level)}">${escapeAttribute(level)}</span>
+                            <span>T\u1ed3n sau: ${escapeAttribute(detailValue(order.inventory))}</span>
+                            <span>D\u1ef1 b\u00e1o: ${escapeAttribute(detailValue(order.future_demand))}</span>
+                            <span>C\u1ea7n nh\u1eadp: ${escapeAttribute(detailValue(order.reorder_quantity, 0))}</span>
+                        </div>
+                    </button>
+                `;
+            }).join("")}
+        </div>
+    `;
+}
+
+function renderOrderDetail(orderId) {
+    const container = document.getElementById("orders");
+    if (!container) return;
+
+    if (!orderId) {
+        renderOrderDetailsList();
+        return;
+    }
+
+    const order = latestFirebaseOrders?.[orderId] ||
+        Object.values(latestFirebaseOrders || {}).find(item =>
+            String(item.order_id || "") === String(orderId)
+        );
+
+    if (!order) {
+        container.innerHTML = `
+            <div class="order-detail-empty">
+                Kh\u00f4ng t\u00ecm th\u1ea5y d\u1eef li\u1ec7u chi ti\u1ebft cho \u0111\u01a1n ${escapeAttribute(orderId)}.
+                <div style="margin-top:12px"><button class="secondary-action-btn" data-action="back-order-list" type="button">Quay l\u1ea1i danh s\u00e1ch</button></div>
+            </div>
+        `;
+        return;
+    }
+
+    const demand7 = detailValue(order.future_demand);
+    const demand30 = order.future_demand_30 != null
+        ? order.future_demand_30
+        : forecast30From7(order.future_demand || 0);
+    const logs = Array.isArray(order.processing_logs)
+        ? order.processing_logs
+        : [];
+    const level = order.inventory_level || "NORMAL";
+
+    const detailRows = [
+        ["M\u00e3 \u0111\u01a1n h\u00e0ng", order.order_id],
+        ["Tr\u1ea1ng th\u00e1i", order.status],
+        ["Kho", order.warehouse_id],
+        ["S\u1ea3n ph\u1ea9m", order.product_id],
+        ["Order Quantity", order.order_quantity],
+        ["T\u1ed3n tr\u01b0\u1edbc", order.inventory_before],
+        ["T\u1ed3n sau", order.inventory],
+        ["D\u1ef1 b\u00e1o 7 ng\u00e0y", demand7],
+        ["D\u1ef1 b\u00e1o 30 ng\u00e0y", demand30],
+        ["S\u1ea3n ph\u1ea9m / Ng\u00e0y", order.daily_sales],
+        ["S\u1ed1 b\u00e1n 7 ng\u00e0y qua", sales7Days(order)],
+        ["S\u1ed1 b\u00e1n 30 ng\u00e0y qua", sales30Days(order)],
+        ["Reorder Point", order.reorder_point],
+        ["C\u1ea7n nh\u1eadp", order.reorder_quantity],
+        ["M\u1ee9c t\u1ed3n kho", `${level} - ${order.inventory_level_description || getInventoryLevelDescription(level)}`],
+        ["M\u1ee9c \u0111\u1ed9 b\u1ed5 sung", getReplenishmentLabel(level)],
+        ["C\u1ea3nh b\u00e1o", order.alert],
+        ["Model", order.model_mode],
+        ["Phi\u00ean b\u1ea3n model", order.model_version],
+        ["Prediction latency", order.prediction_latency_ms != null ? `${order.prediction_latency_ms} ms` : "-"],
+        ["Backend latency", order.processing_latency_ms != null ? `${order.processing_latency_ms} ms` : "-"],
+        ["C\u1eadp nh\u1eadt l\u00fac", order.last_updated_text || formatDetailTime(order.last_updated || order.timestamp)]
+    ];
+
+    container.innerHTML = `
+        <div class="order-detail-layout">
+            <div class="order-detail-main">
+                <button class="secondary-action-btn order-detail-back" data-action="back-order-list" type="button">\u2190 Danh s\u00e1ch \u0111\u01a1n h\u00e0ng</button>
+                <div class="order-detail-header">
+                    <div>
+                        <span class="detail-eyebrow">\u0110\u01a1n h\u00e0ng</span>
+                        <h2>${escapeAttribute(order.order_id || "-")}</h2>
+                        <p>${escapeAttribute(order.warehouse_id || "-")} / ${escapeAttribute(order.product_id || "-")}</p>
+                    </div>
+                    <div class="detail-status-group">
+                        <span class="status-pill" style="color:${getStatusColor(order.status)}">${escapeAttribute(order.status || "-")}</span>
+                        <span class="level-badge level-${escapeAttribute(level)}">${escapeAttribute(level)}</span>
+                    </div>
+                </div>
+                <div class="order-detail-grid">
+                    ${detailRows.map(([label, value]) => `
+                        <div class="order-detail-item">
+                            <span>${escapeAttribute(label)}</span>
+                            <strong>${escapeAttribute(detailValue(value))}</strong>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>
+            <div class="order-detail-log">
+                <h4>Nh\u1eadt k\u00fd x\u1eed l\u00fd</h4>
+                ${logs.length ? logs.map(item => `
+                    <div class="detail-log-line">
+                        <span>${escapeAttribute(item.time || "--:--:--")}</span>
+                        <strong>${escapeAttribute(item.message || "")}</strong>
+                    </div>
+                `).join("") : '<div class="detail-log-line"><strong>Ch\u01b0a c\u00f3 nh\u1eadt k\u00fd x\u1eed l\u00fd.</strong></div>'}
+            </div>
+        </div>
+    `;
 }
 
 function showOrderResult(order) {
@@ -1118,8 +1463,9 @@ function showOrderResult(order) {
 
 function showFormLogs(logs) {
     const container = document.getElementById("realtimeLog");
+    if (!container) return;
     container.innerHTML = "";
-    (logs || []).forEach(item => {
+    (logs || []).slice(-10).forEach(item => {
         const line = document.createElement("div");
         line.className = "log-line";
         line.textContent = `${item.time || "--:--:--"} - ${item.message || ""}`;
@@ -1145,8 +1491,7 @@ document.getElementById("newOrderForm").addEventListener("submit", async event =
         order_quantity: document.getElementById("formOrderQuantity").value,
         lead_time: document.getElementById("formLeadTime").value,
         order_date: document.getElementById("formOrderDate").value,
-        daily_sales: document.getElementById("formDailySales").value,
-        initial_stock: document.getElementById("formInitialStock").value
+        daily_sales: document.getElementById("formDailySales").value
     };
 
     try {
@@ -1162,7 +1507,6 @@ document.getElementById("newOrderForm").addEventListener("submit", async event =
                 : result.error || "Khng th x l n hng.";
             throw new Error(details);
         }
-        showOrderResult(result.order);
         showFormLogs(result.logs);
         message.className = result.order.fallback_used
             ? "form-message error"

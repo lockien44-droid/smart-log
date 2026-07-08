@@ -106,8 +106,6 @@ def handle_firebase_change(event):
             return
 
         order_id = path.split("/")[0]
-        if not order_id:
-            return
 
         if "/" not in path and isinstance(event.data, dict):
             order = event.data
@@ -181,12 +179,12 @@ def model_info():
 
 
 def schedule_delivery_status_flow(order_snapshot, base_logs):
-    """Demo lifecycle: Processing -> Shipping -> Delivered in 4 seconds.
+    """Demo lifecycle: Processing -> Shipping -> Delivered.
 
-    Pending is written before inventory processing and lasts ~2 seconds.
+    Pending is written before inventory processing and lasts ~3 seconds.
     After Processing is written, this background task moves the order to
-    Shipping after 2 more seconds and Delivered after another 2 seconds.
-    Total demo time is roughly 6 seconds from order submission.
+    Shipping after 3 more seconds and Delivered after another 3 seconds.
+    Status changes are only written to Firebase; notifications stay inventory-only.
     """
     def _update_later(status, progress, delay_seconds, message):
         time.sleep(delay_seconds)
@@ -226,13 +224,13 @@ def schedule_delivery_status_flow(order_snapshot, base_logs):
     _update_later(
         status="Shipping",
         progress=65,
-        delay_seconds=2,
+        delay_seconds=3,
         message="Đơn hàng chuyển sang Shipping",
     )
     _update_later(
         status="Delivered",
         progress=100,
-        delay_seconds=2,
+        delay_seconds=3,
         message="Đơn hàng đã Delivered",
     )
 
@@ -251,6 +249,11 @@ def process_order():
     errors = {}
 
     order_id = str(data.get("order_id", "")).strip()
+    if not order_id:
+        order_id = (
+            f"ORD_AUTO_{datetime.now().strftime('%Y%m%d_%H%M%S')}_"
+            f"{int(time.time() * 1000) % 1000:03d}"
+        )
     warehouse_id = str(data.get("warehouse_id", "")).strip()
     product_id = str(data.get("product_id", "")).strip()
 
@@ -281,8 +284,6 @@ def process_order():
     except (TypeError, ValueError):
         initial_stock = -1
 
-    if not order_id:
-        errors["order_id"] = "Không được để trống mã đơn hàng."
     if not product_id:
         errors["product_id"] = "Không được để trống mã sản phẩm."
     if not warehouse_id:
@@ -344,7 +345,7 @@ def process_order():
         sales_7_days=sales_7_days,
         sales_30_days=sales_30_days,
     )
-    time.sleep(2)
+    time.sleep(3)
 
     model_details = get_model_info()
     prediction_started = time.perf_counter()
