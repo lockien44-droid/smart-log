@@ -46,7 +46,13 @@ def train_same_day_model(model_path=MODEL_PATH):
     model = Pipeline([
         ("preprocessor", preprocessor),
         ("model", RandomForestRegressor(
-            n_estimators=100, random_state=42, n_jobs=-1
+            n_estimators=100,
+            max_depth=18,
+            min_samples_leaf=2,
+            max_samples=0.5,
+            max_features=0.8,
+            random_state=42,
+            n_jobs=-1,
         )),
     ])
     model.fit(train_df[FEATURES], train_df[TARGET])
@@ -89,7 +95,7 @@ def train_same_day_model(model_path=MODEL_PATH):
     }
     model_path = Path(model_path)
     model_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(artifact, model_path)
+    joblib.dump(artifact, model_path, compress=3)
     print(f"MAE={metrics['mae']:.2f} RMSE={metrics['rmse']:.2f} R2={metrics['r2']:.4f}")
     print(f"Saved: {model_path}")
     return model, metrics
