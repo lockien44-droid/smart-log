@@ -1,638 +1,313 @@
+import os
 import time
-import uuid
 import traceback
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import socketio
 
-from app.ai.predictor import predict_demand
-
-from app.inventory_service import (
-    evaluate_inventory
-)
-
+from app.ai.predictor import get_model_info, predict_demand
+from app.inventory_service import evaluate_inventory
 from app.firebase.repository import (
-    update_order_status,
+    add_product_stock,
+    deduct_product_stock,
     get_order,
     get_product_stock,
+    record_product_daily_demand,
+    record_product_daily_sales,
     set_product_stock,
-    deduct_product_stock,
-    add_product_stock,
-    update_product_inventory_analysis
+    update_order_status,
+    update_product_inventory_analysis,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-# ==========================================
-# SAFE FUNCTIONS
-# ==========================================
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_FILE = PROJECT_ROOT / "data" / "processed" / "smart_logistics_runtime.csv"
+SERVER_URL = os.environ.get("SIMULATION_SERVER_URL", "http://127.0.0.1:8000")
+ROW_DELAY_SECONDS = float(os.environ.get("SIMULATION_ROW_DELAY", "0.05"))
+
+PROCESSING = "processing"
+ACCEPTED = "accepted"
+REJECTED = "rejected"
+
 
 def safe_int(value, default=0):
     try:
-
-        if isinstance(value, dict):
-
-            if "value" in value:
-                value = value["value"]
-
-            elif len(value) > 0:
-                value = list(value.values())[0]
-
-            else:
-                return default
-
         return int(float(value))
-
-    except Exception:
+    except (TypeError, ValueError):
         return default
 
 
 def safe_float(value, default=0.0):
     try:
-
-        if isinstance(value, dict):
-
-            if "value" in value:
-                value = value["value"]
-
-            elif len(value) > 0:
-                value = list(value.values())[0]
-
-            else:
-                return default
-
         return float(value)
-
-    except Exception:
+    except (TypeError, ValueError):
         return default
 
 
-def safe_dict(obj):
-
-    if isinstance(obj, dict):
-        return obj
-
-    return {}
+def safe_text(value, default="UNKNOWN"):
+    value = str(value if value is not None else "").strip()
+    return value or default
 
 
-# ==========================================
-# MAIN
-# ==========================================
-
-def main():
-
-    print("=" * 60)
-    print("SMART LOGISTICS SYSTEM STARTED")
-    print("=" * 60)
-
-    # ======================================
-    # SOCKET
-    # ======================================
-
-    sio = None
-
+def connect_socket():
     try:
-
-        sio = socketio.Client(
+        client = socketio.Client(
             reconnection=True,
             reconnection_attempts=10,
-            reconnection_delay=2
+            reconnection_delay=2,
         )
+        client.connect(SERVER_URL)
+        print(f"[SOCKET] Connected: {SERVER_URL}")
+        return client
+    except Exception as error:
+        print("[SOCKET ERROR]", error)
+        return None
 
-        sio.connect(
-            "http://127.0.0.1:8000"
-        )
 
-        print(
-            "[SOCKET] Connected"
-        )
+def process_row(row, sio):
+    order_id = safe_text(row.get("order_id"), "SIM_ORDER")
+    warehouse_id = safe_text(row.get("warehouse_id"), "S001")
+    product_id = safe_text(row.get("product_id"), "P0001")
+    order_date = safe_text(row.get("timestamp"), "")
 
-    except Exception as e:
-
-        print(
-            "[SOCKET ERROR]",
-            e
-        )
-
-        sio = None
-
-    # ======================================
-    # DATASET
-    # ======================================
-
-    try:
-
-        df = pd.read_csv(
-            PROJECT_ROOT / "data" / "processed" / "smart_logistics_runtime.csv"
-        )
-
-        df.fillna(
-            0,
-            inplace=True
-        )
-
-    except Exception as e:
-
-        print(
-            "[DATASET ERROR]",
-            e
-        )
-
+    # Idempotency must be checked before any stock mutation.
+    existing_order = get_order(order_id)
+    if isinstance(existing_order, dict) and existing_order.get("processed"):
+        print(f"[SKIPPED] {order_id} was already processed")
         return
 
-    print(
-        f"[SYSTEM] Orders Loaded: {len(df)}"
-    )
+    order_quantity = max(1, safe_int(row.get("order_quantity"), 1))
+    source_inventory = max(0, safe_int(row.get("inventory_quantity")))
+    units_sold = max(0, safe_int(row.get("units_sold"), order_quantity))
+    incoming_stock = max(0, safe_int(row.get("incoming_stock")))
 
-    progress_map = {
-        "Pending": 10,
-        "Processing": 30,
-        "Shipping": 70,
-        "Delivered": 100,
-        "Cancelled": 0
+    feature_values = {
+        "warehouse_id": warehouse_id,
+        "product_id": product_id,
+        "category": safe_text(row.get("category")),
+        "region": safe_text(row.get("region")),
+        "inventory_quantity": source_inventory,
+        "units_sold": units_sold,
+        "actual_demand": row.get("demand"),
+        "units_sold_lag_1": row.get("units_sold_lag_1"),
+        "units_sold_lag_7": row.get("units_sold_lag_7"),
+        "units_sold_rolling_mean_7": row.get(
+            "units_sold_rolling_mean_7"
+        ),
+        "demand_lag_1": row.get("demand_lag_1"),
+        "demand_lag_7": row.get("demand_lag_7"),
+        "demand_lag_14": row.get("demand_lag_14"),
+        "demand_lag_28": row.get("demand_lag_28"),
+        "demand_rolling_mean_7": row.get("demand_rolling_mean_7"),
+        "demand_rolling_mean_28": row.get("demand_rolling_mean_28"),
+        "demand_rolling_std_7": row.get("demand_rolling_std_7"),
+        "demand_rolling_std_28": row.get("demand_rolling_std_28"),
+        "demand_trend_7_28": row.get("demand_trend_7_28"),
+        "incoming_stock": incoming_stock,
+        "price": max(0, safe_float(row.get("price"))),
+        "discount": max(0, safe_float(row.get("discount"))),
+        "weather_condition": safe_text(row.get("weather_condition")),
+        "promotion": max(0, min(safe_int(row.get("promotion")), 1)),
+        "competitor_pricing": max(
+            0,
+            safe_float(row.get("competitor_pricing")),
+        ),
+        "epidemic": max(0, min(safe_int(row.get("epidemic")), 1)),
+        "order_date": order_date,
+        "return_details": True,
     }
 
-    # ======================================
-    # PROCESS ORDERS
-    # ======================================
-
-    for row in df.to_dict("records"):
-
-        try:
-
-            order_id = str(
-                row.get(
-                    "order_id",
-                    uuid.uuid4()
-                )
-            )
-
-            warehouse_id = str(
-                row.get(
-                    "warehouse_id",
-                    "WH01"
-                )
-            )
-
-            product_id = str(
-                row.get(
-                    "product_id",
-                    "PRD001"
-                )
-            )
-
-            inventory_qty = safe_int(
-                row.get(
-                    "inventory_quantity",
-                    0
-                )
-            )
-
-            order_qty = safe_int(
-                row.get(
-                    "order_quantity",
-                    0
-                )
-            )
-
-            daily_sales = safe_int(
-                row.get(
-                    "daily_sales",
-                    0
-                )
-            )
-
-            incoming_stock = safe_int(
-                row.get(
-                    "incoming_stock",
-                    0
-                )
-            )
-
-            lead_time = safe_float(
-                row.get(
-                    "lead_time",
-                    1
-                )
-            )
-
-            vehicle_capacity = safe_int(
-                row.get(
-                    "vehicle_capacity",
-                    100
-                )
-            )
-
-            status = str(
-                row.get(
-                    "delivery_status",
-                    "Pending"
-                )
-            )
-            # ==================================
-            # AI DEMAND PREDICTION
-            # ==================================
-
-            try:
-
-                prediction = predict_demand(
-                    warehouse_id=warehouse_id,
-                    product_id=product_id,
-                    inventory_quantity=inventory_qty,
-                    order_quantity=order_qty,
-                    daily_sales=daily_sales,
-                    incoming_stock=incoming_stock,
-                    lead_time=lead_time,
-                    delivery_status=status,
-                    vehicle_capacity=vehicle_capacity
-                )
-
-                if isinstance(
-                    prediction,
-                    dict
-                ):
-
-                    demand = safe_int(
-                        prediction.get(
-                            "predicted_demand",
-                            prediction.get(
-                                "demand",
-                                prediction.get(
-                                    "value",
-                                    0
-                                )
-                            )
-                        )
-                    )
-
-                else:
-
-                    demand = safe_int(
-                        prediction
-                    )
-
-            except Exception as e:
-
-                print(
-                    "[PREDICT ERROR]",
-                    e
-                )
-
-                demand = 0
-
-            # ==================================
-            # INVENTORY UPDATE
-            # ==================================
-
-            insufficient_stock = False
-
-            try:
-
-                current_stock = get_product_stock(
-                    warehouse_id,
-                    product_id
-                )
-
-                if current_stock is None:
-                    current_stock = set_product_stock(
-                        warehouse_id,
-                        product_id,
-                        inventory_qty
-                    )
-
-                inventory_before = current_stock
-
-                inventory_qty = deduct_product_stock(
-                    warehouse_id,
-                    product_id,
-                    order_qty
-                )
-
-                if incoming_stock > 0:
-                    inventory_qty = add_product_stock(
-                        warehouse_id,
-                        product_id,
-                        incoming_stock
-                    )
-
-            except Exception as e:
-
-                print(
-                    "[INVENTORY ERROR]",
-                    e
-                )
-
-                insufficient_stock = True
-                inventory_before = (
-                    get_product_stock(
-                        warehouse_id,
-                        product_id
-                    ) or 0
-                )
-                inventory_qty = inventory_before
-
-            # ==================================
-            # INVENTORY CHECK
-            # ==================================
-
-            try:
-
-                inventory_report = (
-                    evaluate_inventory(
-                        stock=inventory_qty,
-                        warehouse_id=warehouse_id,
-                        future_demand=demand,
-                        lead_time=lead_time
-                    ) or {}
-                )
-
-            except Exception as e:
-
-                print(
-                    "[CHECK INVENTORY ERROR]",
-                    e
-                )
-
-                inventory_report = {}
-
-            inventory_level = str(
-                inventory_report.get(
-                    "inventory_level",
-                    "NORMAL"
-                )
-            )
-
-            reorder_required = bool(
-                inventory_report.get(
-                    "reorder_required",
-                    False
-                )
-            )
-
-            existing_order = get_order(order_id)
-            if isinstance(existing_order, dict) and existing_order.get("processed"):
-                print(f"[SKIPPED] {order_id} was already processed")
-                continue
-
-            reorder_point = safe_int(
-                inventory_report.get(
-                    "reorder_point",
-                    demand + 50
-                )
-            )
-
-            reorder_quantity = safe_int(
-                inventory_report.get(
-                    "reorder_quantity",
-                    0
-                )
-            )
-
-            inventory_level_description = str(
-                inventory_report.get(
-                    "inventory_level_description",
-                    {
-                        "NORMAL": "Tồn kho an toàn",
-                        "LOW": "Tồn kho thấp",
-                        "CRITICAL": "Tồn kho rất thấp",
-                        "OUT_OF_STOCK": "Hết hàng"
-                    }.get(inventory_level, "Không xác định")
-                )
-            )
-
-            update_product_inventory_analysis(
-                warehouse_id=warehouse_id,
-                product_id=product_id,
-                future_demand=demand,
-                inventory_level=inventory_level,
-                reorder_point=reorder_point,
-                reorder_quantity=reorder_quantity,
-                reorder_required=reorder_required
-            )
-
-            # ==================================
-            # INVENTORY ALERT LOGIC
-            # ==================================
-
-            alert = "NORMAL"
-
-            if inventory_level == "OUT_OF_STOCK":
-
-                alert = "OUT_OF_STOCK"
-
-            elif inventory_level == "CRITICAL":
-
-                alert = "REORDER_REQUIRED"
-
-            elif inventory_level == "LOW":
-
-                alert = "LOW_STOCK"
-
-            if insufficient_stock:
-                alert = "INSUFFICIENT_STOCK"
-                status = "Cancelled"
-
-            # ==================================
-            # INVENTORY STATUS RULES
-            # ==================================
-
-            if insufficient_stock:
-
-                status = "Cancelled"
-
-            elif inventory_level == "OUT_OF_STOCK":
-
-                status = "Cancelled"
-
-            elif inventory_level == "CRITICAL":
-
-                status = "Processing"
-
-            elif inventory_level == "LOW":
-
-                status = "Processing"
-
-            # ==================================
-            # PROGRESS
-            # ==================================
-
-            progress = progress_map.get(
-                status,
-                0
-            )
-            # ==================================
-            # PAYLOAD
-            # ==================================
-
-            payload = {
-
-                "event_id": str(
-                    uuid.uuid4()
-                ),
-
-                "order_id": order_id,
-                "warehouse_id": warehouse_id,
-                "product_id": product_id,
-
-                "status": status,
-                "progress": progress,
-
-                "inventory": inventory_qty,
-                "inventory_before": inventory_before,
-                "order_quantity": order_qty,
-                "demand": demand,
-                "future_demand": demand,
-
-                "inventory_level": inventory_level,
-                "inventory_level_description": inventory_level_description,
-
-                "daily_sales": daily_sales,
-                "incoming_stock": incoming_stock,
-                "lead_time": lead_time,
-                "vehicle_capacity": vehicle_capacity,
-
-                "alert": alert,
-
-                "reorder_required": reorder_required,
-                "reorder_point": reorder_point,
-                "reorder_quantity": reorder_quantity,
-
-                "timestamp": datetime.now().isoformat()
-            }
-
-            # ==================================
-            # FIREBASE UPDATE
-            # ==================================
-
-            try:
-
-                update_order_status(
-
-                    order_id=order_id,
-                    status=status,
-                    inventory=inventory_qty,
-                    demand=demand,
-
-                    inventory_level=inventory_level,
-
-                    warehouse_id=warehouse_id,
-                    product_id=product_id,
-
-                    alert=alert,
-
-                    progress=progress,
-
-                    reorder_required=reorder_required,
-                    reorder_point=reorder_point,
-                    reorder_quantity=reorder_quantity,
-                    inventory_level_description=inventory_level_description,
-                    order_quantity=order_qty,
-                    inventory_before=inventory_before,
-
-                    event_id=payload["event_id"]
-                )
-
-            except Exception as e:
-
-                print(
-                    "[FIREBASE ERROR]",
-                    e
-                )
-
-            # ==================================
-            # SOCKET EMIT
-            # ==================================
-
-            try:
-
-                if (
-                    sio is not None
-                    and sio.connected
-                ):
-
-                    sio.emit(
-                        "status_update",
-                        payload
-                    )
-
-            except Exception as e:
-
-                print(
-                    "[SOCKET ERROR]",
-                    e
-                )
-
-            # ==================================
-            # CONSOLE LOG
-            # ==================================
-
-            print(
-
-                f"[{order_id}] "
-
-                f"{status} | "
-
-                f"Inventory={inventory_qty} | "
-
-                f"Demand={demand} | "
-
-                f"Alert={alert} | "
-
-            )
-
-            time.sleep(
-                0.05
-            )
-
-        except Exception:
-
-            print(
-                "\n========== ROW ERROR =========="
-            )
-
-            traceback.print_exc()
-
-            try:
-
-                print(
-                    "ROW DATA:",
-                    row
-                )
-
-            except Exception:
-                pass
-
-            print(
-                "===============================\n"
-            )
-
-    # ==================================
-    # CLEANUP
-    # ==================================
+    prediction = predict_demand(**feature_values)
+    demand = max(0, safe_int(prediction.get("future_demand")))
+    model_info = get_model_info()
+
+    current_stock = get_product_stock(warehouse_id, product_id)
+    if current_stock is None:
+        current_stock = set_product_stock(
+            warehouse_id,
+            product_id,
+            source_inventory,
+        )
+    inventory_before = current_stock
+
+    if incoming_stock > 0:
+        current_stock = add_product_stock(
+            warehouse_id,
+            product_id,
+            incoming_stock,
+        )
 
     try:
+        inventory_after = deduct_product_stock(
+            warehouse_id,
+            product_id,
+            order_quantity,
+            order_id=order_id,
+        )
+        status = ACCEPTED
+        progress = 100
+        insufficient_stock = False
+    except ValueError:
+        inventory_after = current_stock
+        status = REJECTED
+        progress = 0
+        insufficient_stock = True
 
-        if (
-            sio is not None
-            and sio.connected
-        ):
+    report = evaluate_inventory(
+        stock=inventory_after,
+        warehouse_id=warehouse_id,
+        future_demand=demand,
+    )
+    inventory_level = report["inventory_level"]
+    alert = {
+        "NORMAL": "NORMAL",
+        "LOW": "LOW_STOCK",
+        "CRITICAL": "REORDER_REQUIRED",
+        "OUT_OF_STOCK": "OUT_OF_STOCK",
+    }[inventory_level]
+    if insufficient_stock:
+        alert = "INSUFFICIENT_STOCK"
 
-            sio.disconnect()
+    update_product_inventory_analysis(
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        future_demand=demand,
+        inventory_level=inventory_level,
+        reorder_point=report["reorder_point"],
+        reorder_quantity=report["reorder_quantity"],
+        reorder_required=report["reorder_required"],
+        incoming_stock=incoming_stock,
+        category=feature_values["category"],
+        region=feature_values["region"],
+        units_sold=units_sold,
+        inventory_quantity=inventory_before,
+        price=feature_values["price"],
+        discount=feature_values["discount"],
+        weather_condition=feature_values["weather_condition"],
+        promotion=feature_values["promotion"],
+        competitor_pricing=feature_values["competitor_pricing"],
+        seasonality=safe_text(row.get("seasonality")),
+        epidemic=feature_values["epidemic"],
+    )
+    record_product_daily_sales(
+        warehouse_id,
+        product_id,
+        order_date,
+        units_sold,
+    )
+    if pd.notna(row.get("demand")):
+        record_product_daily_demand(
+            warehouse_id, product_id, order_date, row.get("demand")
+        )
 
-    except Exception:
-        pass
+    update_order_status(
+        order_id=order_id,
+        status=status,
+        inventory=inventory_after,
+        inventory_before=inventory_before,
+        demand=demand,
+        inventory_level=inventory_level,
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        order_quantity=order_quantity,
+        incoming_stock=incoming_stock,
+        units_sold=units_sold,
+        inventory_quantity=inventory_before,
+        category=feature_values["category"],
+        region=feature_values["region"],
+        price=feature_values["price"],
+        discount=feature_values["discount"],
+        weather_condition=feature_values["weather_condition"],
+        promotion=feature_values["promotion"],
+        competitor_pricing=feature_values["competitor_pricing"],
+        seasonality=safe_text(row.get("seasonality")),
+        epidemic=feature_values["epidemic"],
+        reorder_required=report["reorder_required"],
+        reorder_point=report["reorder_point"],
+        reorder_quantity=report["reorder_quantity"],
+        inventory_level_description=report[
+            "inventory_level_description"
+        ],
+        alert=alert,
+        progress=progress,
+        processed=True,
+        model_mode=prediction.get("mode"),
+        model_version=model_info.get("model_version"),
+        fallback_used=prediction.get("fallback_used", False),
+        prediction_error=prediction.get("error"),
+        order_date=prediction.get("observation_date", order_date),
+        forecast_date=prediction.get("forecast_date"),
+        units_sold_lag_1=feature_values["units_sold_lag_1"],
+        units_sold_lag_7=feature_values["units_sold_lag_7"],
+        units_sold_rolling_mean_7=feature_values[
+            "units_sold_rolling_mean_7"
+        ],
+        cold_start=prediction.get("cold_start", False),
+        fallback_reason=prediction.get("fallback_reason"),
+        missing_history=prediction.get("missing_history"),
+        unknown_categories=prediction.get("unknown_categories"),
+    )
+
+    payload = {
+        "order_id": order_id,
+        "warehouse_id": warehouse_id,
+        "product_id": product_id,
+        "status": status,
+        "progress": progress,
+        "inventory": inventory_after,
+        "inventory_before": inventory_before,
+        "order_quantity": order_quantity,
+        "future_demand": demand,
+        "inventory_level": inventory_level,
+        "inventory_level_description": report[
+            "inventory_level_description"
+        ],
+        "reorder_required": report["reorder_required"],
+        "reorder_point": report["reorder_point"],
+        "reorder_quantity": report["reorder_quantity"],
+        "alert": alert,
+        "timestamp": order_date,
+        "forecast_date": prediction.get("forecast_date"),
+        "model_mode": prediction.get("mode"),
+    }
+    if sio is not None and sio.connected:
+        sio.emit("status_update", payload)
 
     print(
-        "\nSYSTEM FINISHED"
+        f"[{order_id}] {status} | Inventory={inventory_after} | "
+        f"Demand(t+1)={demand} | Model={prediction.get('mode')}"
     )
 
 
-# ==================================
-# START
-# ==================================
+def main():
+    print("=" * 60)
+    print("SMART LOGISTICS t+1 SIMULATION STARTED")
+    print("=" * 60)
+
+    if not RUNTIME_FILE.exists():
+        raise FileNotFoundError(
+            f"Missing {RUNTIME_FILE}. Run python -m ml.prepare_data first."
+        )
+
+    sio = connect_socket()
+    df = pd.read_csv(RUNTIME_FILE)
+    print(f"[SYSTEM] Orders loaded: {len(df):,}")
+
+    for row in df.to_dict("records"):
+        try:
+            process_row(row, sio)
+            time.sleep(max(0, ROW_DELAY_SECONDS))
+        except Exception:
+            print("\n========== ROW ERROR ==========")
+            traceback.print_exc()
+            print("ROW DATA:", row)
+            print("===============================\n")
+
+    if sio is not None and sio.connected:
+        sio.disconnect()
+    print("\nSYSTEM FINISHED")
+
 
 if __name__ == "__main__":
-
     main()

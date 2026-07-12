@@ -1,8 +1,19 @@
+import math
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
+
 import joblib
 import pandas as pd
-from datetime import datetime
+
+from ml.schema import (
+    FEATURES,
+    FORECAST_HORIZON_DAYS,
+    HISTORY_FEATURES,
+    PROCESSED_SCHEMA_VERSION,
+    seasonality_from_month,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = PROJECT_ROOT / "models" / "random_forest_model.pkl"
@@ -10,233 +21,210 @@ MODEL_PATH = PROJECT_ROOT / "models" / "random_forest_model.pkl"
 model = None
 MODEL_METADATA = {}
 MODEL_LOAD_ERROR = None
+FEATURE_COLUMNS = FEATURES.copy()
 
-FEATURE_COLUMNS = [
-    "warehouse_id",
-    "product_id",
-    "inventory_quantity",
-    "daily_sales",
-    "incoming_stock",
-    "sales_lag_1",
-    "sales_lag_7",
-    "sales_lag_14",
-    "sales_mean_7",
-    "sales_mean_30",
-    "day_of_week",
-    "month",
-    "is_weekend"
-]
-
-# =====================================
-# LOAD MODEL
-# =====================================
-
-if os.path.exists(MODEL_PATH):
-
-    try:
-
-        data = joblib.load(MODEL_PATH)
-
-        if isinstance(data, dict):
-
-            model = data.get("model")
-            MODEL_METADATA = {
-                key: value
-                for key, value in data.items()
-                if key != "model"
-            }
-
-            FEATURE_COLUMNS = data.get(
-                "features",
-                FEATURE_COLUMNS
-            )
-
-        else:
-
-            model = data
-
-        print(
-            "[AI] Model Loaded Successfully"
-        )
-
-    except Exception as e:
-        MODEL_LOAD_ERROR = str(e)
-
-        print(
-            "[AI] Model Load Error:",
-            e
-        )
-
-        model = None
-
-else:
-
-    print(
-        "[AI] Model Not Found -> Using Fallback"
-    )
-
-
-# =====================================
-# SAFE NUMBER
-# =====================================
 
 def safe_number(value, default=0):
-
     try:
-
-        if value is None:
+        if value is None or value == "":
             return float(default)
-
-        if isinstance(value, dict):
-
-            if "value" in value:
-
-                value = value["value"]
-
-            elif len(value) > 0:
-
-                value = list(
-                    value.values()
-                )[0]
-
-            else:
-
-                return float(default)
-
-        return float(value)
-
+        number = float(value)
+        return number if math.isfinite(number) else float(default)
     except Exception:
-
         return float(default)
 
 
-# =====================================
-# FEATURE BUILDER
-# =====================================
+def optional_number(value):
+    try:
+        if value is None or value == "":
+            return None
+        number = float(value)
+        return number if math.isfinite(number) else None
+    except Exception:
+        return None
+
+
+def safe_text(value, default="UNKNOWN"):
+    value = str(value if value is not None else "").strip()
+    return value or default
+
+
+def resolve_forecast_date(order_date=None, horizon_days=None):
+    try:
+        observation_date = pd.to_datetime(order_date).to_pydatetime()
+    except Exception:
+        observation_date = datetime.now()
+    horizon = int(
+        horizon_days
+        if horizon_days is not None
+        else MODEL_METADATA.get(
+            "forecast_horizon_days",
+            FORECAST_HORIZON_DAYS,
+        )
+    )
+    return observation_date, observation_date + timedelta(days=max(0, horizon))
+
+
+if os.path.exists(MODEL_PATH):
+    try:
+        artifact = joblib.load(MODEL_PATH)
+        if not isinstance(artifact, dict) or "model" not in artifact:
+            raise ValueError("Model artifact is not a supported bundle")
+        if artifact.get("schema_version") != PROCESSED_SCHEMA_VERSION:
+            raise ValueError(
+                "Model artifact uses an outdated feature schema; retrain required"
+            )
+        model = artifact["model"]
+        MODEL_METADATA = {
+            key: value
+            for key, value in artifact.items()
+            if key != "model"
+        }
+        FEATURE_COLUMNS = artifact.get("features", FEATURES)
+        if FEATURE_COLUMNS != FEATURES:
+            raise ValueError(
+                "Model feature schema differs from runtime; retrain required"
+            )
+        print(f"[AI] {MODEL_METADATA.get('model_name', 't+1 model')} loaded")
+    except Exception as error:
+        MODEL_LOAD_ERROR = str(error)
+        model = None
+        print("[AI] Model Load Error:", error)
+else:
+    print("[AI] Model Not Found -> Using Fallback")
+
 
 def build_features(
+    warehouse_id,
+    product_id,
+    category,
+    region,
     inventory_quantity,
-    order_quantity,
-    daily_sales,
+    units_sold,
+    actual_demand,
     incoming_stock,
-    lead_time,
-    delivery_status,
-    vehicle_capacity,
-    warehouse_id="0",
-    product_id="0"
+    price,
+    discount,
+    weather_condition,
+    promotion,
+    competitor_pricing,
+    epidemic,
+    order_date=None,
+    units_sold_lag_1=None,
+    units_sold_lag_7=None,
+    units_sold_rolling_mean_7=None,
+    demand_lag_1=None,
+    demand_lag_7=None,
+    demand_lag_14=None,
+    demand_lag_28=None,
+    demand_rolling_mean_7=None,
+    demand_rolling_mean_28=None,
+    demand_rolling_std_7=None,
+    demand_rolling_std_28=None,
+    demand_trend_7_28=None,
 ):
+    observation_date, forecast_date = resolve_forecast_date(order_date)
+    sales_lag_1 = optional_number(units_sold_lag_1)
+    if sales_lag_1 is None:
+        sales_lag_1 = optional_number(units_sold)
+    current_demand = optional_number(demand_lag_1)
+    if current_demand is None:
+        current_demand = optional_number(actual_demand)
 
-    inventory_quantity = max(
-        0,
-        safe_number(
-            inventory_quantity
-        )
+    mean_7 = optional_number(demand_rolling_mean_7)
+    mean_28 = optional_number(demand_rolling_mean_28)
+    trend = optional_number(demand_trend_7_28)
+    if trend is None and mean_7 is not None and mean_28 is not None:
+        trend = mean_7 - mean_28
+
+    inventory = max(0, safe_number(inventory_quantity))
+    product_price = max(0, safe_number(price))
+    competitor_price = max(0, safe_number(competitor_pricing))
+    inventory_ratio = (
+        inventory / max(current_demand, 1)
+        if current_demand is not None
+        else None
     )
-
-    order_quantity = max(
-        0,
-        safe_number(
-            order_quantity
-        )
-    )
-
-    daily_sales = max(
-        0,
-        safe_number(
-            daily_sales
-        )
-    )
-
-    incoming_stock = max(
-        0,
-        safe_number(
-            incoming_stock
-        )
-    )
-
-    lead_time = max(
-        0,
-        safe_number(
-            lead_time
-        )
-    )
-
-    vehicle_capacity = max(
-        0,
-        safe_number(
-            vehicle_capacity
-        )
-    )
-
-    now = datetime.now()
+    price_ratio = product_price / max(competitor_price, 0.01)
 
     return {
-        "warehouse_id": str(warehouse_id),
-        "product_id": str(product_id),
-        "inventory_quantity":
-            inventory_quantity,
-
-        "daily_sales":
-            daily_sales,
-
-        "incoming_stock":
-            incoming_stock,
-
-        # Cold-start defaults: the current daily sales value is used when
-        # a live system has not yet supplied product-level sales history.
-        "sales_lag_1": safe_number(daily_sales),
-        "sales_lag_7": safe_number(daily_sales),
-        "sales_lag_14": safe_number(daily_sales),
-        "sales_mean_7": safe_number(daily_sales),
-        "sales_mean_30": safe_number(daily_sales),
-        "day_of_week": now.weekday(),
-        "month": now.month,
-        "is_weekend": int(now.weekday() >= 5)
+        "warehouse_id": safe_text(warehouse_id),
+        "product_id": safe_text(product_id),
+        "category": safe_text(category),
+        "region": safe_text(region),
+        "weather_condition": safe_text(weather_condition),
+        "forecast_seasonality": seasonality_from_month(forecast_date.month),
+        "forecast_day_of_week": forecast_date.weekday(),
+        "forecast_month": forecast_date.month,
+        "forecast_is_weekend": int(forecast_date.weekday() >= 5),
+        "seasonality": seasonality_from_month(observation_date.month),
+        "date_ordinal": observation_date.toordinal(),
+        "day_of_week": observation_date.weekday(),
+        "month": observation_date.month,
+        "is_weekend": int(observation_date.weekday() >= 5),
+        "inventory_quantity": inventory,
+        "units_sold": max(0, safe_number(units_sold)),
+        "units_sold_lag_1": sales_lag_1,
+        "units_sold_lag_7": optional_number(units_sold_lag_7),
+        "units_sold_rolling_mean_7": optional_number(
+            units_sold_rolling_mean_7
+        ),
+        "demand_lag_1": current_demand,
+        "demand_lag_7": optional_number(demand_lag_7),
+        "demand_lag_14": optional_number(demand_lag_14),
+        "demand_lag_28": optional_number(demand_lag_28),
+        "demand_rolling_mean_7": mean_7,
+        "demand_rolling_mean_28": mean_28,
+        "demand_rolling_std_7": optional_number(demand_rolling_std_7),
+        "demand_rolling_std_28": optional_number(demand_rolling_std_28),
+        "demand_trend_7_28": trend,
+        "incoming_stock": max(0, safe_number(incoming_stock)),
+        "price": product_price,
+        "discount": max(0, safe_number(discount)),
+        "promotion": int(max(0, min(safe_number(promotion), 1))),
+        "competitor_pricing": competitor_price,
+        "epidemic": int(max(0, min(safe_number(epidemic), 1))),
+        "inventory_to_demand_ratio": inventory_ratio,
+        "price_vs_competitor_ratio": price_ratio,
     }
 
 
-# =====================================
-# FALLBACK
-# =====================================
-
-def fallback(
-    daily_sales,
-    order_quantity,
-    incoming_stock
-):
-
-    daily_sales = safe_number(
-        daily_sales
-    )
-
-    order_quantity = safe_number(
-        order_quantity
-    )
-
-    incoming_stock = safe_number(
-        incoming_stock
-    )
-
+def fallback(units_sold, incoming_stock, price=0, promotion=0):
     value = (
-        daily_sales * 0.6 +
-        order_quantity * 0.3 +
-        incoming_stock * 0.1
+        safe_number(units_sold) * 0.75
+        + safe_number(incoming_stock) * 0.15
+        + safe_number(price) * 0.02
+        + safe_number(promotion) * 5
     )
-
-    return max(
-        0,
-        int(round(value))
-    )
+    return max(0, int(round(value)))
 
 
-# =====================================
-# MAIN PREDICT FUNCTION
-# =====================================
+def _unknown_categories(features):
+    known_categories = MODEL_METADATA.get("known_categories", {})
+    unknown = []
+    for column, known_values in known_categories.items():
+        if column in features and str(features[column]) not in {
+            str(value) for value in known_values
+        }:
+            unknown.append(column)
+    return unknown
+
 
 def predict_demand(**kwargs):
     return_details = bool(kwargs.pop("return_details", False))
+    observation_date, forecast_date = resolve_forecast_date(
+        kwargs.get("order_date")
+    )
 
-    def result(value, mode, error=None):
+    def result(
+        value,
+        mode,
+        error=None,
+        cold_start=False,
+        fallback_reason=None,
+        missing_history=None,
+        unknown_categories=None,
+    ):
         normalized = max(0, min(int(round(float(value))), 100000))
         if return_details:
             return {
@@ -244,172 +232,137 @@ def predict_demand(**kwargs):
                 "mode": mode,
                 "fallback_used": mode == "Fallback",
                 "error": error,
+                "cold_start": bool(cold_start),
+                "fallback_reason": fallback_reason,
+                "missing_history": list(missing_history or []),
+                "unknown_categories": list(unknown_categories or []),
+                "observation_date": observation_date.date().isoformat(),
+                "forecast_date": forecast_date.date().isoformat(),
             }
         return normalized
 
     try:
-
         features = build_features(
-            inventory_quantity=kwargs.get(
-                "inventory_quantity",
-                0
-            ),
-
-            order_quantity=kwargs.get(
-                "order_quantity",
-                0
-            ),
-
-            daily_sales=kwargs.get(
-                "daily_sales",
-                0
-            ),
-
-            incoming_stock=kwargs.get(
-                "incoming_stock",
-                0
-            ),
-
-            lead_time=kwargs.get(
-                "lead_time",
-                0
-            ),
-
-            delivery_status=kwargs.get(
-                "delivery_status",
-                "Pending"
-            ),
-
-            vehicle_capacity=kwargs.get(
-                "vehicle_capacity",
-                0
-            ),
-
-            warehouse_id=kwargs.get(
-                "warehouse_id",
-                0
-            ),
-
-            product_id=kwargs.get(
-                "product_id",
-                0
-            ),
+            warehouse_id=kwargs.get("warehouse_id"),
+            product_id=kwargs.get("product_id"),
+            category=kwargs.get("category"),
+            region=kwargs.get("region"),
+            inventory_quantity=kwargs.get("inventory_quantity"),
+            units_sold=kwargs.get("units_sold"),
+            actual_demand=kwargs.get("actual_demand"),
+            incoming_stock=kwargs.get("incoming_stock"),
+            price=kwargs.get("price"),
+            discount=kwargs.get("discount"),
+            weather_condition=kwargs.get("weather_condition"),
+            promotion=kwargs.get("promotion"),
+            competitor_pricing=kwargs.get("competitor_pricing"),
+            epidemic=kwargs.get("epidemic"),
+            order_date=kwargs.get("order_date"),
+            **{
+                column: kwargs.get(column)
+                for column in HISTORY_FEATURES
+            },
         )
-
-        # =========================
-        # NO MODEL
-        # =========================
-
-        if model is None:
-
-            value = fallback(
-                kwargs.get(
-                    "daily_sales",
-                    0
-                ),
-
-                kwargs.get(
-                    "order_quantity",
-                    0
-                ),
-
-                kwargs.get(
-                    "incoming_stock",
-                    0
-                )
-            )
+        unknown = _unknown_categories(features)
+        missing_history = [
+            column
+            for column in HISTORY_FEATURES
+            if optional_number(features.get(column)) is None
+        ]
+        if missing_history:
             return result(
-                value,
+                fallback(
+                    kwargs.get("units_sold"),
+                    kwargs.get("incoming_stock"),
+                    kwargs.get("price"),
+                    kwargs.get("promotion"),
+                ),
+                "Fallback",
+                "Chưa đủ 28 ngày lịch sử sales/demand: "
+                + ", ".join(missing_history),
+                cold_start=True,
+                fallback_reason="insufficient_demand_history",
+                missing_history=missing_history,
+                unknown_categories=unknown,
+            )
+        if model is None:
+            return result(
+                fallback(
+                    kwargs.get("units_sold"),
+                    kwargs.get("incoming_stock"),
+                    kwargs.get("price"),
+                    kwargs.get("promotion"),
+                ),
                 "Fallback",
                 MODEL_LOAD_ERROR or "Không tìm thấy model .pkl",
+                fallback_reason="model_unavailable",
+                unknown_categories=unknown,
             )
 
-        # =========================
-        # MODEL PREDICT
-        # =========================
-
-        df = pd.DataFrame(
-            [features]
+        runtime_df = pd.DataFrame([features])[FEATURE_COLUMNS]
+        prediction = model.predict(runtime_df)
+        return result(
+            float(prediction[0]),
+            MODEL_METADATA.get("model_name", "Forecast Model"),
+            unknown_categories=unknown,
         )
-
-        df = df.reindex(
-            columns=FEATURE_COLUMNS,
-            fill_value=0
-        )
-
-        prediction = model.predict(
-            df
-        )
-
-        if prediction is None:
-            return result(0, "Fallback", "Model không trả về kết quả")
-
-        value = float(
-            prediction[0]
-        )
-
-        return result(value, "Random Forest")
-
-    except Exception as e:
-
-        print(
-            "[AI ERROR]",
-            e
-        )
-
-        value = fallback(
-            kwargs.get(
-                "daily_sales",
-                0
+    except Exception as error:
+        print("[AI ERROR]", error)
+        return result(
+            fallback(
+                kwargs.get("units_sold"),
+                kwargs.get("incoming_stock"),
+                kwargs.get("price"),
+                kwargs.get("promotion"),
             ),
-
-            kwargs.get(
-                "order_quantity",
-                0
-            ),
-
-            kwargs.get(
-                "incoming_stock",
-                0
-            )
+            "Fallback",
+            str(error),
+            fallback_reason="prediction_error",
         )
-        return result(value, "Fallback", str(e))
 
 
 def get_model_info():
     metrics = MODEL_METADATA.get("metrics", {})
+    model_name = MODEL_METADATA.get("model_name", "Demand Forecast Model")
     return {
-        "name": MODEL_METADATA.get(
-            "model_name",
-            "Random Forest Regressor"
-        ),
+        "name": model_name,
         "loaded": model is not None,
-        "mode": (
-            "Random Forest"
-            if model is not None
-            else "Fallback"
-        ),
+        "mode": model_name if model is not None else "Fallback",
         "load_error": MODEL_LOAD_ERROR,
-        "encoding": MODEL_METADATA.get(
-            "encoding",
-            "Numeric code"
-        ),
-        "train_test": MODEL_METADATA.get(
-            "split",
-            "80% / 20%"
-        ),
+        "schema_version": MODEL_METADATA.get("schema_version"),
+        "encoding": MODEL_METADATA.get("encoding", "OneHotEncoder"),
+        "train_test": MODEL_METADATA.get("split", "80% / 20%"),
         "train_rows": MODEL_METADATA.get("train_rows"),
         "test_rows": MODEL_METADATA.get("test_rows"),
-        "n_estimators": MODEL_METADATA.get(
-            "n_estimators",
-            100
-        ),
+        "n_estimators": MODEL_METADATA.get("n_estimators"),
         "mae": metrics.get("mae"),
         "rmse": metrics.get("rmse"),
         "r2": metrics.get("r2"),
+        "baseline_metrics": MODEL_METADATA.get("baseline_metrics", {}),
+        "validation_results": MODEL_METADATA.get("validation_results", []),
+        "selected_candidate": MODEL_METADATA.get("selected_candidate"),
         "model_file": str(MODEL_PATH),
         "model_version": MODEL_METADATA.get(
             "model_version",
-            f"rf-{MODEL_METADATA.get('cutoff_date', 'unknown')}"
+            f"forecast-{MODEL_METADATA.get('cutoff_date', 'unknown')}",
         ),
+        "target": MODEL_METADATA.get("target", "future_demand"),
+        "target_description": MODEL_METADATA.get(
+            "target_description",
+            "Demand on the exact next calendar day (t+1)",
+        ),
+        "prediction_contract": MODEL_METADATA.get("prediction_contract"),
+        "forecast_horizon_days": MODEL_METADATA.get(
+            "forecast_horizon_days",
+            FORECAST_HORIZON_DAYS,
+        ),
+        "history_features": MODEL_METADATA.get(
+            "history_features",
+            HISTORY_FEATURES,
+        ),
+        "ignored_source_columns": MODEL_METADATA.get(
+            "ignored_source_columns", []
+        ),
+        "source_features": MODEL_METADATA.get("source_features", []),
+        "sklearn_version": MODEL_METADATA.get("sklearn_version"),
     }

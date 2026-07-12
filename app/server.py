@@ -3,12 +3,14 @@ from flask_socketio import SocketIO, emit
 from werkzeug.exceptions import HTTPException
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+import pandas as pd
 from firebase_admin import db
 
 from app.inventory_service import evaluate_inventory
 from app.ai.predictor import get_model_info, predict_demand
+from ml.schema import HISTORY_FEATURES
 
 FIREBASE_IMPORT_ERROR = None
 try:
@@ -18,8 +20,14 @@ try:
         get_all_orders,
         get_order,
         get_product_data,
+        get_product_demand_features,
+        get_product_sales_features,
         get_product_stock,
+        delete_warehouse,
+        record_product_daily_sales,
+        record_product_daily_demand,
         rename_product_location,
+        rename_warehouse,
         set_product_stock,
         update_order_status,
         update_product_inventory_analysis,
@@ -31,14 +39,29 @@ except Exception as error:
     get_all_orders = None
     get_order = None
     get_product_data = None
+    get_product_demand_features = None
+    get_product_sales_features = None
     get_product_stock = None
+    delete_warehouse = None
+    record_product_daily_sales = None
+    record_product_daily_demand = None
     rename_product_location = None
+    rename_warehouse = None
     set_product_stock = None
     update_order_status = None
     update_product_inventory_analysis = None
     print("[FIREBASE] Initialization failed:", FIREBASE_IMPORT_ERROR)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_DATA_FILE = PROJECT_ROOT / "data" / "raw" / "demand_forecasting.csv"
+PROCESSING = "processing"
+ACCEPTED = "accepted"
+REJECTED = "rejected"
+STATUS_LABELS = {
+    PROCESSING: "Đang xử lý",
+    ACCEPTED: "Đủ hàng – Đã nhận đơn",
+    REJECTED: "Không đủ hàng – Từ chối đơn",
+}
 app = Flask(
     __name__,
     template_folder=str(PROJECT_ROOT / "templates"),
@@ -178,61 +201,32 @@ def model_info():
     return jsonify(get_model_info())
 
 
-def schedule_delivery_status_flow(order_snapshot, base_logs):
-    """Demo lifecycle: Processing -> Shipping -> Delivered.
+@app.route("/api/feature-options")
+def feature_options():
+    if not RAW_DATA_FILE.exists():
+        return jsonify({
+            "ok": False,
+            "error": "Không tìm thấy data/raw/demand_forecasting.csv",
+        }), 404
 
-    Pending is written before inventory processing and lasts ~3 seconds.
-    After Processing is written, this background task moves the order to
-    Shipping after 3 more seconds and Delivered after another 3 seconds.
-    Status changes are only written to Firebase; notifications stay inventory-only.
-    """
-    def _update_later(status, progress, delay_seconds, message):
-        time.sleep(delay_seconds)
-        logs = list(base_logs) + [_log(message)]
-        update_order_status(
-            order_id=order_snapshot["order_id"],
-            status=status,
-            inventory=order_snapshot["inventory"],
-            inventory_before=order_snapshot["inventory_before"],
-            demand=order_snapshot["future_demand"],
-            inventory_level=order_snapshot["inventory_level"],
-            warehouse_id=order_snapshot["warehouse_id"],
-            product_id=order_snapshot["product_id"],
-            order_quantity=order_snapshot["order_quantity"],
-            reorder_point=order_snapshot["reorder_point"],
-            reorder_quantity=order_snapshot["reorder_quantity"],
-            reorder_required=order_snapshot["reorder_required"],
-            alert=order_snapshot["alert"],
-            progress=progress,
-            inventory_level_description=order_snapshot[
-                "inventory_level_description"
-            ],
-            processing_logs=logs,
-            processing_latency_ms=order_snapshot["processing_latency_ms"],
-            prediction_latency_ms=order_snapshot["prediction_latency_ms"],
-            model_mode=order_snapshot["model_mode"],
-            model_version=order_snapshot["model_version"],
-            fallback_used=order_snapshot["fallback_used"],
-            prediction_error=order_snapshot.get("prediction_error"),
-            server_completed_at_ms=round(time.time() * 1000),
-            future_demand_30=order_snapshot["future_demand_30"],
-            daily_sales=order_snapshot["daily_sales"],
-            sales_7_days=order_snapshot["sales_7_days"],
-            sales_30_days=order_snapshot["sales_30_days"],
+    df = pd.read_csv(RAW_DATA_FILE)
+
+    def values(column):
+        if column not in df.columns:
+            return []
+        return sorted(
+            str(value)
+            for value in df[column].dropna().unique()
+            if str(value).strip()
         )
 
-    _update_later(
-        status="Shipping",
-        progress=65,
-        delay_seconds=3,
-        message="Đơn hàng chuyển sang Shipping",
-    )
-    _update_later(
-        status="Delivered",
-        progress=100,
-        delay_seconds=3,
-        message="Đơn hàng đã Delivered",
-    )
+    return jsonify({
+        "ok": True,
+        "category": values("Category"),
+        "region": values("Region"),
+        "weather_condition": values("Weather Condition"),
+        "seasonality": values("Seasonality"),
+    })
 
 
 @app.route("/api/orders/process", methods=["POST"])
@@ -256,6 +250,14 @@ def process_order():
         )
     warehouse_id = str(data.get("warehouse_id", "")).strip()
     product_id = str(data.get("product_id", "")).strip()
+    order_date = str(data.get("order_date", "")).strip()
+    observation_date = None
+    forecast_date = None
+    try:
+        observation_date = datetime.strptime(order_date, "%Y-%m-%d").date()
+        forecast_date = observation_date + timedelta(days=1)
+    except (TypeError, ValueError):
+        pass
 
     try:
         order_quantity = int(data.get("order_quantity", 0))
@@ -263,16 +265,49 @@ def process_order():
         order_quantity = 0
 
     try:
-        lead_time = float(data.get("lead_time", 0))
+        incoming_stock = max(0, int(data.get("incoming_stock", 0)))
     except (TypeError, ValueError):
-        lead_time = 0
+        incoming_stock = 0
+
+    category = str(data.get("category", "")).strip()
+    region = str(data.get("region", "")).strip()
+    weather_condition = str(data.get("weather_condition", "")).strip()
+    seasonality = str(data.get("seasonality", "")).strip()
 
     try:
-        daily_sales = max(0, int(data.get("daily_sales", 0)))
+        units_sold = max(0, int(data.get("units_sold", order_quantity)))
     except (TypeError, ValueError):
-        daily_sales = 0
-    sales_7_days = daily_sales * 7
-    sales_30_days = daily_sales * 30
+        units_sold = 0
+
+    try:
+        inventory_feature = max(0, int(data.get("inventory_quantity", 0)))
+    except (TypeError, ValueError):
+        inventory_feature = -1
+
+    try:
+        price = max(0, float(data.get("price", 0)))
+    except (TypeError, ValueError):
+        price = -1
+
+    try:
+        discount = max(0, float(data.get("discount", 0)))
+    except (TypeError, ValueError):
+        discount = -1
+
+    try:
+        promotion = int(data.get("promotion", 0))
+    except (TypeError, ValueError):
+        promotion = -1
+
+    try:
+        competitor_pricing = max(0, float(data.get("competitor_pricing", 0)))
+    except (TypeError, ValueError):
+        competitor_pricing = -1
+
+    try:
+        epidemic = int(data.get("epidemic", 0))
+    except (TypeError, ValueError):
+        epidemic = -1
 
     initial_stock_raw = data.get("initial_stock")
     try:
@@ -288,10 +323,32 @@ def process_order():
         errors["product_id"] = "Không được để trống mã sản phẩm."
     if not warehouse_id:
         errors["warehouse_id"] = "Không được để trống mã kho."
+    if observation_date is None:
+        errors["order_date"] = "Ngày dữ liệu phải theo định dạng YYYY-MM-DD."
     if order_quantity <= 0:
-        errors["order_quantity"] = "Số lượng đặt phải lớn hơn 0."
-    if lead_time <= 0:
-        errors["lead_time"] = "Lead time phải lớn hơn 0."
+        errors["order_quantity"] = "Số lượng bán phải lớn hơn 0."
+    if not category:
+        errors["category"] = "Vui lòng chọn danh mục sản phẩm."
+    if not region:
+        errors["region"] = "Vui lòng chọn khu vực."
+    if inventory_feature < 0:
+        errors["inventory_quantity"] = "Tồn kho hiện tại phải là số không âm."
+    if units_sold <= 0:
+        errors["units_sold"] = "Units Sold phải lớn hơn 0."
+    if price < 0:
+        errors["price"] = "Giá sản phẩm phải là số không âm."
+    if discount < 0:
+        errors["discount"] = "Giảm giá phải là số không âm."
+    if not weather_condition:
+        errors["weather_condition"] = "Vui lòng chọn điều kiện thời tiết."
+    if promotion not in (0, 1):
+        errors["promotion"] = "Khuyến mãi chỉ nhận 0 hoặc 1."
+    if competitor_pricing < 0:
+        errors["competitor_pricing"] = "Giá đối thủ phải là số không âm."
+    if not seasonality:
+        errors["seasonality"] = "Vui lòng chọn mùa vụ."
+    if epidemic not in (0, 1):
+        errors["epidemic"] = "Dịch bệnh chỉ nhận 0 hoặc 1."
     if initial_stock is not None and initial_stock < 0:
         errors["initial_stock"] = "Tồn kho ban đầu không được âm."
     if errors:
@@ -323,9 +380,56 @@ def process_order():
         )
         logs.append(_log(f"Khởi tạo tồn kho = {stock_before}"))
 
+    history_features = get_product_sales_features(
+        warehouse_id,
+        product_id,
+        order_date,
+        units_sold,
+    ) if HISTORY_FEATURES and get_product_sales_features is not None else {
+        "units_sold_lag_1": units_sold,
+        "units_sold_lag_7": None,
+        "units_sold_rolling_mean_7": None,
+        "history_complete": not HISTORY_FEATURES,
+        "missing_history": [],
+    }
+    actual_demand = data.get("actual_demand")
+    if actual_demand not in (None, ""):
+        try:
+            actual_demand = max(0, float(actual_demand))
+        except (TypeError, ValueError):
+            return jsonify({
+                "ok": False,
+                "errors": {"actual_demand": "Must be a non-negative number."},
+            }), 400
+    else:
+        actual_demand = None
+    demand_features = get_product_demand_features(
+        warehouse_id, product_id, order_date, actual_demand
+    ) if HISTORY_FEATURES and get_product_demand_features is not None else {
+        "history_complete": not HISTORY_FEATURES,
+        "missing_history": [],
+    }
+    history_features.update({
+        key: value for key, value in demand_features.items()
+        if key.startswith("demand_")
+    })
+    history_features["history_complete"] = bool(
+        history_features.get("history_complete")
+        and demand_features.get("history_complete")
+    )
+    history_features["missing_history"] = sorted(set(
+        history_features.get("missing_history", [])
+        + demand_features.get("missing_history", [])
+    ))
+    if not history_features.get("history_complete"):
+        logs.append(_log(
+            "Chưa đủ lịch sử bán hàng 7 ngày; dự báo sẽ dùng fallback."
+        ))
+
+    model_inventory_quantity = stock_before
     update_order_status(
         order_id=order_id,
-        status="Pending",
+        status=PROCESSING,
         inventory=stock_before,
         inventory_before=stock_before,
         demand=0,
@@ -336,28 +440,69 @@ def process_order():
         reorder_point=0,
         reorder_quantity=0,
         reorder_required=False,
-        alert="PENDING",
-        progress=10,
-        inventory_level_description="Đơn mới, chờ xử lý tồn kho",
+        alert=PROCESSING.upper(),
+        progress=20,
+        inventory_level_description=STATUS_LABELS[PROCESSING],
         processed=False,
-        processing_logs=logs + [_log("Đơn hàng ở trạng thái Pending")],
-        daily_sales=daily_sales,
-        sales_7_days=sales_7_days,
-        sales_30_days=sales_30_days,
+        processing_logs=logs + [_log(STATUS_LABELS[PROCESSING])],
+        incoming_stock=incoming_stock,
+        category=category,
+        region=region,
+        units_sold=units_sold,
+        inventory_quantity=model_inventory_quantity,
+        price=price,
+        discount=discount,
+        weather_condition=weather_condition,
+        promotion=promotion,
+        competitor_pricing=competitor_pricing,
+        seasonality=seasonality,
+        epidemic=epidemic,
+        order_date=order_date,
+        forecast_date=forecast_date.isoformat(),
+        units_sold_lag_1=history_features.get("units_sold_lag_1"),
+        units_sold_lag_7=history_features.get("units_sold_lag_7"),
+        units_sold_rolling_mean_7=history_features.get(
+            "units_sold_rolling_mean_7"
+        ),
+        cold_start=not history_features.get("history_complete"),
+        missing_history=history_features.get("missing_history"),
     )
-    time.sleep(3)
 
     model_details = get_model_info()
     prediction_started = time.perf_counter()
     prediction_result = predict_demand(
         warehouse_id=warehouse_id,
         product_id=product_id,
-        inventory_quantity=stock_before,
+        category=category,
+        region=region,
+        inventory_quantity=model_inventory_quantity,
+        units_sold=units_sold,
+        actual_demand=actual_demand,
+        units_sold_lag_1=history_features.get("units_sold_lag_1"),
+        units_sold_lag_7=history_features.get("units_sold_lag_7"),
+        units_sold_rolling_mean_7=history_features.get(
+            "units_sold_rolling_mean_7"
+        ),
+        **{
+            key: history_features.get(key)
+            for key in (
+                "demand_lag_1", "demand_lag_7", "demand_lag_14",
+                "demand_lag_28", "demand_rolling_mean_7",
+                "demand_rolling_mean_28", "demand_rolling_std_7",
+                "demand_rolling_std_28", "demand_trend_7_28",
+            )
+        },
         order_quantity=order_quantity,
-        daily_sales=daily_sales,
-        incoming_stock=0,
-        lead_time=lead_time,
-        delivery_status="Pending",
+        incoming_stock=incoming_stock,
+        price=price,
+        discount=discount,
+        weather_condition=weather_condition,
+        promotion=promotion,
+        competitor_pricing=competitor_pricing,
+        seasonality=seasonality,
+        epidemic=epidemic,
+        order_date=order_date,
+        delivery_status=PROCESSING,
         vehicle_capacity=1000,
         return_details=True,
     )
@@ -365,7 +510,6 @@ def process_order():
         0,
         round(prediction_result["future_demand"]),
     )
-    future_demand_30 = max(0, round(demand * 30 / 7))
     prediction_latency_ms = round(
         (time.perf_counter() - prediction_started) * 1000
     )
@@ -373,30 +517,70 @@ def process_order():
         f"{prediction_result['mode']} dự báo nhu cầu = {demand} "
         f"({prediction_latency_ms} ms)"
     ))
+    if prediction_result.get("unknown_categories"):
+        logs.append(_log(
+            "Cảnh báo category/ID chưa từng xuất hiện khi train: "
+            + ", ".join(prediction_result["unknown_categories"])
+        ))
     if prediction_result["fallback_used"]:
         logs.append(_log(
-            "CẢNH BÁO: Model lỗi hoặc không tồn tại; "
+            "CẢNH BÁO: Không dùng được Random Forest; "
             f"đang dùng fallback. {prediction_result.get('error') or ''}"
         ))
 
-    try:
-        stock_after = deduct_product_stock(
-            warehouse_id,
-            product_id,
-            order_quantity,
-            order_id=order_id,
+    prediction_audit = {
+        "order_date": prediction_result.get("observation_date", order_date),
+        "forecast_date": prediction_result.get(
+            "forecast_date",
+            forecast_date.isoformat(),
+        ),
+        "units_sold_lag_1": history_features.get("units_sold_lag_1"),
+        "units_sold_lag_7": history_features.get("units_sold_lag_7"),
+        "units_sold_rolling_mean_7": history_features.get(
+            "units_sold_rolling_mean_7"
+        ),
+        "cold_start": prediction_result.get("cold_start", False),
+        "fallback_reason": prediction_result.get("fallback_reason"),
+        "missing_history": history_features.get("missing_history", []),
+        "unknown_categories": prediction_result.get(
+            "unknown_categories",
+            [],
+        ),
+    }
+
+    def persist_daily_sales():
+        if record_product_daily_sales is None:
+            return
+        try:
+            record_product_daily_sales(
+                warehouse_id, product_id, order_date, units_sold
+            )
+        except Exception as error:
+            logs.append(_log(f"Không lưu được lịch sử bán hàng: {error}"))
+
+        if actual_demand is not None and record_product_daily_demand is not None:
+            try:
+                record_product_daily_demand(
+                    warehouse_id, product_id, order_date, actual_demand
+                )
+            except Exception as error:
+                logs.append(_log(f"Cannot store actual demand history: {error}"))
+
+    available_stock = stock_before + incoming_stock
+    if order_quantity > available_stock:
+        error_message = (
+            f"Không đủ tồn kho: tồn {stock_before}, "
+            f"nhập thêm {incoming_stock}, khách mua {order_quantity}"
         )
-    except ValueError as exc:
-        logs.append(_log(str(exc)))
+        logs.append(_log(error_message))
         cancel_report = evaluate_inventory(
             stock=stock_before,
             future_demand=demand,
-            lead_time=lead_time,
             warehouse_id=warehouse_id,
         )
         update_order_status(
             order_id=order_id,
-            status="Cancelled",
+            status=REJECTED,
             inventory=stock_before,
             inventory_before=stock_before,
             demand=demand,
@@ -407,34 +591,78 @@ def process_order():
             reorder_point=cancel_report["reorder_point"],
             reorder_quantity=cancel_report["reorder_quantity"],
             reorder_required=True,
-            alert="INSUFFICIENT_STOCK",
+            alert="OUT_OF_STOCK" if stock_before <= 0 else "INSUFFICIENT_STOCK",
             progress=0,
             inventory_level_description=cancel_report[
                 "inventory_level_description"
             ],
-            processing_logs=logs + [_log("Đơn bị hủy do không đủ tồn kho")],
+            processed=True,
+            processing_logs=logs + [_log(STATUS_LABELS[REJECTED])],
             prediction_latency_ms=prediction_latency_ms,
             model_mode=prediction_result["mode"],
             model_version=model_details["model_version"],
             fallback_used=prediction_result["fallback_used"],
             prediction_error=prediction_result.get("error"),
             server_completed_at_ms=round(time.time() * 1000),
-            future_demand_30=future_demand_30,
-            daily_sales=daily_sales,
-            sales_7_days=sales_7_days,
-            sales_30_days=sales_30_days,
+            incoming_stock=incoming_stock,
+            category=category,
+            region=region,
+            units_sold=units_sold,
+            inventory_quantity=model_inventory_quantity,
+            price=price,
+            discount=discount,
+            weather_condition=weather_condition,
+            promotion=promotion,
+            competitor_pricing=competitor_pricing,
+            seasonality=seasonality,
+            epidemic=epidemic,
+            **prediction_audit,
         )
+        persist_daily_sales()
         return jsonify({
-            "ok": False,
-            "error": str(exc),
+            "ok": True,
+            "accepted": False,
+            "message": STATUS_LABELS[REJECTED],
+            "order": {
+                "order_id": order_id,
+                "status": REJECTED,
+                "status_label": STATUS_LABELS[REJECTED],
+                "warehouse_id": warehouse_id,
+                "product_id": product_id,
+                "inventory_before": stock_before,
+                "inventory": stock_before,
+                "order_quantity": order_quantity,
+                "incoming_stock": incoming_stock,
+                "future_demand": demand,
+                "inventory_level": cancel_report["inventory_level"],
+                "reorder_point": cancel_report["reorder_point"],
+                "reorder_quantity": cancel_report["reorder_quantity"],
+                "alert": "OUT_OF_STOCK" if stock_before <= 0 else "INSUFFICIENT_STOCK",
+                "model_mode": prediction_result["mode"],
+                "model_version": model_details["model_version"],
+                "fallback_used": prediction_result["fallback_used"],
+                "prediction_error": prediction_result.get("error"),
+                "forecast_date": prediction_audit["forecast_date"],
+                "cold_start": prediction_audit["cold_start"],
+                "fallback_reason": prediction_audit["fallback_reason"],
+            },
             "logs": logs,
-        }), 409
+            "model": model_details,
+        })
 
-    logs.append(_log(f"Tồn kho mới = {stock_after}"))
+    stock_after = set_product_stock(
+        warehouse_id,
+        product_id,
+        available_stock - order_quantity,
+    )
+
+    logs.append(_log(
+        f"T?n kho m?i = {stock_after} "
+        f"(t?n tr??c {stock_before} - b?n {order_quantity} + nh?p {incoming_stock})"
+    ))
     report = evaluate_inventory(
         stock=stock_after,
         future_demand=demand,
-        lead_time=lead_time,
         warehouse_id=warehouse_id,
     )
     level = report["inventory_level"]
@@ -453,10 +681,18 @@ def process_order():
         reorder_point=report["reorder_point"],
         reorder_quantity=report["reorder_quantity"],
         reorder_required=report["reorder_required"],
-        future_demand_30=future_demand_30,
-        daily_sales=daily_sales,
-        sales_7_days=sales_7_days,
-        sales_30_days=sales_30_days,
+        incoming_stock=incoming_stock,
+        category=category,
+        region=region,
+        units_sold=units_sold,
+        inventory_quantity=model_inventory_quantity,
+        price=price,
+        discount=discount,
+        weather_condition=weather_condition,
+        promotion=promotion,
+        competitor_pricing=competitor_pricing,
+        seasonality=seasonality,
+        epidemic=epidemic,
     )
 
     logs.append(_log("Gửi dữ liệu lên Firebase"))
@@ -472,13 +708,21 @@ def process_order():
         "warehouse_id": warehouse_id,
         "product_id": product_id,
         "inventory_before": stock_before,
+        "inventory_quantity": model_inventory_quantity,
         "order_quantity": order_quantity,
+        "incoming_stock": incoming_stock,
         "inventory": stock_after,
         "future_demand": demand,
-        "future_demand_30": future_demand_30,
-        "daily_sales": daily_sales,
-        "sales_7_days": sales_7_days,
-        "sales_30_days": sales_30_days,
+        "category": category,
+        "region": region,
+        "units_sold": units_sold,
+        "price": price,
+        "discount": discount,
+        "weather_condition": weather_condition,
+        "promotion": promotion,
+        "competitor_pricing": competitor_pricing,
+        "seasonality": seasonality,
+        "epidemic": epidemic,
         "inventory_level": level,
         "inventory_level_description": report[
             "inventory_level_description"
@@ -496,7 +740,7 @@ def process_order():
     }
     update_order_status(
         order_id=order_id,
-        status="Processing",
+        status=ACCEPTED,
         inventory=stock_after,
         inventory_before=stock_before,
         demand=demand,
@@ -508,11 +752,12 @@ def process_order():
         reorder_quantity=report["reorder_quantity"],
         reorder_required=report["reorder_required"],
         alert=alert,
-        progress=30,
+        progress=100,
         inventory_level_description=report[
             "inventory_level_description"
         ],
-        processing_logs=logs,
+        processed=True,
+        processing_logs=logs + [_log(STATUS_LABELS[ACCEPTED])],
         processing_latency_ms=processing_latency_ms,
         prediction_latency_ms=prediction_latency_ms,
         model_mode=prediction_result["mode"],
@@ -520,31 +765,47 @@ def process_order():
         fallback_used=prediction_result["fallback_used"],
         prediction_error=prediction_result.get("error"),
         server_completed_at_ms=server_completed_at_ms,
-        future_demand_30=future_demand_30,
-        daily_sales=daily_sales,
-        sales_7_days=sales_7_days,
-        sales_30_days=sales_30_days,
+        incoming_stock=incoming_stock,
+        category=category,
+        region=region,
+        units_sold=units_sold,
+        inventory_quantity=model_inventory_quantity,
+        price=price,
+        discount=discount,
+        weather_condition=weather_condition,
+        promotion=promotion,
+        competitor_pricing=competitor_pricing,
+        seasonality=seasonality,
+        epidemic=epidemic,
+        **prediction_audit,
     )
-    socketio.start_background_task(
-        schedule_delivery_status_flow,
-        order_snapshot,
-        logs,
-    )
-
+    persist_daily_sales()
     return jsonify({
         "ok": True,
+        "accepted": True,
+        "message": STATUS_LABELS[ACCEPTED],
         "order": {
             "order_id": order_id,
+            "status": ACCEPTED,
+            "status_label": STATUS_LABELS[ACCEPTED],
             "warehouse_id": warehouse_id,
             "product_id": product_id,
             "inventory_before": stock_before,
+            "inventory_quantity": model_inventory_quantity,
             "order_quantity": order_quantity,
+            "incoming_stock": incoming_stock,
             "inventory": stock_after,
             "future_demand": demand,
-            "future_demand_30": future_demand_30,
-            "daily_sales": daily_sales,
-            "sales_7_days": sales_7_days,
-            "sales_30_days": sales_30_days,
+            "category": category,
+            "region": region,
+            "units_sold": units_sold,
+            "price": price,
+            "discount": discount,
+            "weather_condition": weather_condition,
+            "promotion": promotion,
+            "competitor_pricing": competitor_pricing,
+            "seasonality": seasonality,
+            "epidemic": epidemic,
             "inventory_level": level,
             "reorder_point": report["reorder_point"],
             "reorder_quantity": report["reorder_quantity"],
@@ -553,6 +814,9 @@ def process_order():
             "model_version": model_details["model_version"],
             "fallback_used": prediction_result["fallback_used"],
             "prediction_error": prediction_result.get("error"),
+            "forecast_date": prediction_audit["forecast_date"],
+            "cold_start": prediction_audit["cold_start"],
+            "fallback_reason": prediction_audit["fallback_reason"],
         },
         "logs": logs,
         "model": model_details,
@@ -612,10 +876,6 @@ def create_product():
         reorder_point=report["reorder_point"],
         reorder_quantity=report["reorder_quantity"],
         reorder_required=report["reorder_required"],
-        future_demand_30=0,
-        daily_sales=0,
-        sales_7_days=0,
-        sales_30_days=0,
     )
     return jsonify({
         "ok": True,
@@ -750,6 +1010,76 @@ def rename_product():
         }), 500
 
     return jsonify({"ok": True, "product": result})
+
+
+@app.route("/api/warehouses/rename", methods=["POST"])
+def rename_warehouse_api():
+    if FIREBASE_IMPORT_ERROR or rename_warehouse is None:
+        return jsonify({
+            "ok": False,
+            "error": "Firebase chưa sẵn sàng để sửa tên kho.",
+            "detail": FIREBASE_IMPORT_ERROR,
+        }), 503
+
+    data = request.get_json(silent=True) or {}
+    old_warehouse_id = str(data.get("old_warehouse_id", "")).strip()
+    new_warehouse_id = str(data.get("new_warehouse_id", "")).strip()
+
+    errors = {}
+    if not old_warehouse_id:
+        errors["old_warehouse_id"] = "Thiếu tên kho hiện tại."
+    if not new_warehouse_id:
+        errors["new_warehouse_id"] = "Tên kho mới không được để trống."
+    if errors:
+        return jsonify({"ok": False, "errors": errors}), 400
+
+    try:
+        result = rename_warehouse(old_warehouse_id, new_warehouse_id)
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    except Exception as error:
+        return jsonify({
+            "ok": False,
+            "error": f"Backend sửa tên kho thất bại: {error}",
+        }), 500
+
+    return jsonify({"ok": True, "warehouse": result})
+
+
+@app.route("/api/warehouses/delete", methods=["DELETE"])
+def delete_warehouse_api():
+    if FIREBASE_IMPORT_ERROR or delete_warehouse is None:
+        return jsonify({
+            "ok": False,
+            "error": "Firebase chưa sẵn sàng để xóa kho.",
+            "detail": FIREBASE_IMPORT_ERROR,
+        }), 503
+
+    data = request.get_json(silent=True) or {}
+    warehouse_id = str(data.get("warehouse_id", "")).strip()
+    confirmation = str(data.get("confirm", "")).strip()
+    if not warehouse_id:
+        return jsonify({
+            "ok": False,
+            "errors": {"warehouse_id": "Tên kho không được để trống."},
+        }), 400
+    if confirmation != warehouse_id:
+        return jsonify({
+            "ok": False,
+            "error": "Xác nhận xóa kho không hợp lệ.",
+        }), 400
+
+    try:
+        result = delete_warehouse(warehouse_id)
+    except ValueError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    except Exception as error:
+        return jsonify({
+            "ok": False,
+            "error": f"Backend xóa kho thất bại: {error}",
+        }), 500
+
+    return jsonify({"ok": True, "warehouse": result})
 
 
 # =========================

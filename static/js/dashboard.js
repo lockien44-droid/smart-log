@@ -14,7 +14,15 @@ let stockAlertsEnabled =
 let pushNotificationFilter = "ALL";
 let currentNotificationAlerts = [];
 let warehouseSortMode = "latest";
+let selectedWarehouseId = null;
 let selectedOrderDetailId = null;
+let warehouseActionState = null;
+let featureOptions = {
+    category: [],
+    region: [],
+    weather_condition: [],
+    seasonality: []
+};
 const readNotificationKeys = new Set(
     JSON.parse(localStorage.getItem("readNotificationKeys") || "[]")
 );
@@ -31,11 +39,34 @@ const orderManagementNav = document.getElementById("orderManagementNav");
 const forecastNav = document.getElementById("forecastNav");
 const productMenuToggle = document.getElementById("productMenuToggle");
 const productSubmenu = document.getElementById("productSubmenu");
-const allProductsNav = document.getElementById("allProductsNav");
-const addProductNav = document.getElementById("addProductNav");
-const restockNav = document.getElementById("restockNav");
+const bulkListNav = document.getElementById("bulkListNav");
 const alertNav = document.getElementById("alertNav");
 const historyNav = document.getElementById("historyNav");
+
+const ORDER_STATUS = {
+    processing: {
+        label: "Đang xử lý",
+        color: "#3b82f6"
+    },
+    accepted: {
+        label: "Đủ hàng – Đã nhận đơn",
+        color: "#16a34a"
+    },
+    rejected: {
+        label: "Không đủ hàng – Từ chối đơn",
+        color: "#ef4444"
+    }
+};
+
+function normalizeOrderStatus(status) {
+    const value = String(status || "").trim().toLowerCase();
+    return ORDER_STATUS[value] ? value : null;
+}
+
+function getStatusLabel(status) {
+    const key = normalizeOrderStatus(status);
+    return key ? ORDER_STATUS[key].label : "-";
+}
 
 function setBreadcrumb(path) {
     const home = "Trang chủ";
@@ -91,10 +122,9 @@ const featureSectionIds = [
     "modelSection",
     "chartsSection",
     "realtimeLogSection",
-    "addProductSection",
-    "restockSection",
     "alertsSection",
     "orderListSection",
+    "bulkListSection",
     "warehouseInventorySection"
 ];
 
@@ -170,18 +200,9 @@ productMenuToggle.addEventListener("click", () => {
     productMenuToggle.querySelector(".chevron").textContent = productSubmenu.classList.contains("collapsed") ? ">" : "v";
 });
 
-allProductsNav.addEventListener("click", () => {
-    activateMenu(allProductsNav, ["Trang chủ", "Quản lý sản phẩm", "Tất cả sản phẩm"], "warehouseInventorySection");
-});
 
-addProductNav.addEventListener("click", () => {
-    activateMenu(addProductNav, ["Trang chủ", "Quản lý sản phẩm", "Thêm / Nhập hàng"], ["addProductSection", "restockSection"]);
-    document.getElementById("newProductId").focus();
-});
-
-restockNav?.addEventListener("click", () => {
-    activateMenu(restockNav, ["Trang chủ", "Quản lý sản phẩm", "Thêm / Nhập hàng"], "restockSection");
-    document.getElementById("restockProductId").focus();
+bulkListNav?.addEventListener("click", () => {
+    activateMenu(bulkListNav, ["Trang chủ", "Quản lý kho hàng", "Thêm kho mới"], "bulkListSection");
 });
 
 alertNav.addEventListener("click", event => {
@@ -195,7 +216,7 @@ historyNav.addEventListener("click", () => {
 });
 
 inventoryNav.addEventListener("click", () => {
-    activateMenu(inventoryNav, ["Trang chủ", "Quản lý sản phẩm", "Quản lý tồn kho"], ["inventoryOverviewSection", "orderListSection", "warehouseInventorySection"]);
+    activateMenu(inventoryNav, ["Trang chủ", "Quản lý kho hàng", "Kho và sản phẩm"], ["inventoryOverviewSection", "warehouseInventorySection"]);
 });
 
 orderDetailsNav.addEventListener("click", () => {
@@ -523,6 +544,48 @@ function renderOrderProductOptions() {
     } else if (products.length) {
         productSelect.value = products[0];
     }
+    updateOrderInventoryFeature();
+}
+
+function setSelectOptions(selectId, values, placeholder) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const currentValue = select.value;
+    const options = (values || [])
+        .filter(value => value !== null && value !== undefined && String(value).trim() !== "")
+        .map(value => String(value));
+    select.innerHTML = `<option value="">${placeholder}</option>` + options.map(value =>
+        `<option value="${escapeAttribute(value)}">${value}</option>`
+    ).join("");
+    if (options.includes(currentValue)) {
+        select.value = currentValue;
+    } else if (options.length) {
+        select.value = options[0];
+    }
+}
+
+function renderFeatureOptions() {
+    setSelectOptions("formCategory", featureOptions.category, "Chọn danh mục");
+    setSelectOptions("formRegion", featureOptions.region, "Chọn khu vực");
+    setSelectOptions("formWeatherCondition", featureOptions.weather_condition, "Chọn thời tiết");
+    setSelectOptions("formSeasonality", featureOptions.seasonality, "Chọn mùa vụ");
+}
+
+function getSelectedWarehouseProduct() {
+    const warehouseId = document.getElementById("formWarehouseId")?.value;
+    const productId = document.getElementById("formProductId")?.value;
+    if (!warehouseId || !productId) return null;
+    return realtimeWarehouses?.[warehouseId]?.products?.[productId] || null;
+}
+
+function updateOrderInventoryFeature() {
+    const inventoryInput = document.getElementById("formInventoryQuantity");
+    if (!inventoryInput) return;
+    const item = getSelectedWarehouseProduct();
+    const stock = item?.stock ?? item?.inventory ?? item?.inventory_quantity;
+    if (stock !== undefined && stock !== null && String(stock) !== "") {
+        inventoryInput.value = Math.max(0, Number(stock) || 0);
+    }
 }
 
 function renderRestockProductOptions() {
@@ -562,29 +625,6 @@ function escapeAttribute(value) {
         .replace(/>/g, "&gt;");
 }
 
-function forecast30From7(value) {
-    return Math.max(0, Math.round(toNumber(value) * 30 / 7));
-}
-
-function sales7Days(item) {
-    if (item.sales_7_days != null) return toNumber(item.sales_7_days);
-    if (item.sales_last_7_days != null) return toNumber(item.sales_last_7_days);
-    if (item.sales_mean_7 != null) return Math.round(toNumber(item.sales_mean_7) * 7);
-    if (item.daily_sales != null) return Math.round(toNumber(item.daily_sales) * 7);
-    if (item.future_demand != null) return toNumber(item.future_demand);
-    return 0;
-}
-
-function sales30Days(item) {
-    if (item.sales_30_days != null) return toNumber(item.sales_30_days);
-    if (item.sales_last_30_days != null) return toNumber(item.sales_last_30_days);
-    if (item.sales_mean_30 != null) return Math.round(toNumber(item.sales_mean_30) * 30);
-    if (item.daily_sales != null) return Math.round(toNumber(item.daily_sales) * 30);
-    if (item.future_demand_30 != null) return toNumber(item.future_demand_30);
-    if (item.future_demand != null) return forecast30From7(item.future_demand);
-    return 0;
-}
-
 function renderSalesAnalysis(orders = [], warehouses = {}) {
     const rows = flattenWarehouseProducts(warehouses);
     const warehouseIds = new Set();
@@ -602,24 +642,12 @@ function renderSalesAnalysis(orders = [], warehouses = {}) {
         });
     }
 
-    const sourceRows = rows.length
-        ? rows
-        : orders.map(order => ({
-            sales_7_days: order.sales_7_days,
-            sales_30_days: order.sales_30_days,
-            daily_sales: order.daily_sales,
-            future_demand: order.future_demand,
-            future_demand_30: order.future_demand_30
-        }));
-
-    const totalSales7 = sourceRows.reduce(
-        (sum, item) => sum + sales7Days(item),
-        0
-    );
-    const totalSales30 = sourceRows.reduce(
-        (sum, item) => sum + sales30Days(item),
-        0
-    );
+    const acceptedOrders = orders.filter(order =>
+        normalizeOrderStatus(order.status) === "accepted"
+    ).length;
+    const rejectedOrders = orders.filter(order =>
+        normalizeOrderStatus(order.status) === "rejected"
+    ).length;
 
     const setText = (id, value) => {
         const element = document.getElementById(id);
@@ -628,8 +656,8 @@ function renderSalesAnalysis(orders = [], warehouses = {}) {
 
     setText("salesWarehouseTotal", warehouseIds.size);
     setText("salesProductTotal", productIds.size);
-    setText("sales7DaysTotal", totalSales7);
-    setText("sales30DaysTotal", totalSales30);
+    setText("salesAcceptedTotal", acceptedOrders);
+    setText("salesRejectedTotal", rejectedOrders);
 }
 
 function renderStockForecastChart(data) {
@@ -692,63 +720,118 @@ function renderLatestRealtimeLog(orders) {
 }
 
 function renderWarehouseInventory(data) {
-    const tableBody = document.getElementById("warehouseTableBody");
+    const container = document.getElementById("warehouseDrilldown");
+    if (!container) return;
     const rows = flattenWarehouseProducts(data);
 
-    if (warehouseSortMode === "warehouse") {
-        rows.sort((a, b) => {
-            const warehouseCompare = String(a.warehouseId).localeCompare(
-                String(b.warehouseId),
-                "vi",
-                { numeric: true }
-            );
-            if (warehouseCompare !== 0) return warehouseCompare;
-            return String(a.productId).localeCompare(
-                String(b.productId),
-                "vi",
-                { numeric: true }
-            );
-        });
-    } else {
-        rows.sort((a, b) =>
-            Number(b.last_updated || 0) - Number(a.last_updated || 0)
-        );
+    if (!rows.length) {
+        container.innerHTML = '<div class="inventory-note">Chưa có dữ liệu kho để hiển thị.</div>';
+        return;
     }
 
-    tableBody.innerHTML = rows.length
-        ? rows.map(item => {
-            const forecast7 = toNumber(item.future_demand, 0);
-            const forecast30 = item.future_demand_30 != null
-                ? toNumber(item.future_demand_30, 0)
-                : forecast30From7(forecast7);
-            return `
-            <tr>
-                <td>${item.warehouseId}</td>
-                <td>${item.productId}</td>
-                <td><strong>${item.stock ?? 0}</strong></td>
-                <td>${sales7Days(item)}</td>
-                <td>${sales30Days(item)}</td>
-                <td>${forecast7}</td>
-                <td>${forecast30}</td>
-                <td>${item.reorder_point ?? '-'}</td>
-                <td>${item.reorder_quantity ?? 0}</td>
-                <td>
-                    <span class="level-badge level-${item.inventory_level || 'NORMAL'}">
-                        ${item.inventory_level || 'CHƯA ĐÁNH GIÁ'}
-                    </span>
-                </td>
-                <td>
-                    <button
-                        class="table-edit-btn"
-                        type="button"
-                        data-action="edit-product"
-                        data-warehouse="${escapeAttribute(item.warehouseId)}"
-                        data-product="${escapeAttribute(item.productId)}"
-                    >Sửa</button>
-                </td>
-            </tr>
-        `}).join("")
-        : '<tr><td colspan="11">Chưa có dữ liệu tồn kho.</td></tr>';
+    const byWarehouse = rows.reduce((grouped, item) => {
+        const warehouse = item.warehouseId || "UNKNOWN";
+        if (!grouped[warehouse]) grouped[warehouse] = [];
+        grouped[warehouse].push(item);
+        return grouped;
+    }, {});
+
+    const warehouseIds = Object.keys(byWarehouse).sort((a, b) =>
+        a.localeCompare(b, "vi", { numeric: true })
+    );
+
+    if (
+        selectedWarehouseId &&
+        !Object.prototype.hasOwnProperty.call(byWarehouse, selectedWarehouseId)
+    ) {
+        selectedWarehouseId = null;
+    }
+
+    if (!selectedWarehouseId) {
+        container.innerHTML = `
+            <div class="warehouse-card-grid">
+                ${warehouseIds.map(warehouseId => {
+                    const products = byWarehouse[warehouseId];
+                    const totalStock = products.reduce((sum, item) =>
+                        sum + toNumber(item.stock, 0), 0
+                    );
+                    const categories = new Set(products.map(item =>
+                        item.category || "Chưa phân loại"
+                    ));
+                    const warningCount = products.filter(item =>
+                        ["LOW", "CRITICAL", "OUT_OF_STOCK"].includes(item.inventory_level)
+                    ).length;
+                    return `
+                        <div class="warehouse-card">
+                            <button class="warehouse-card-open" type="button" data-warehouse-open="${escapeAttribute(warehouseId)}">
+                                <strong>${escapeAttribute(warehouseId)}</strong>
+                                <span>${products.length} sản phẩm</span>
+                                <span>${categories.size} danh mục</span>
+                                <span>Tồn kho: ${totalStock.toLocaleString("vi-VN")}</span>
+                                <span>Cảnh báo: ${warningCount}</span>
+                            </button>
+                            <div class="warehouse-card-actions">
+                                <button class="warehouse-action-btn edit" type="button" data-action="edit-warehouse" data-warehouse="${escapeAttribute(warehouseId)}" title="Sửa tên kho" aria-label="Sửa tên kho">✎</button>
+                                <button class="warehouse-action-btn delete" type="button" data-action="delete-warehouse" data-warehouse="${escapeAttribute(warehouseId)}" data-product-count="${products.length}" title="Xóa kho" aria-label="Xóa kho">🗑</button>
+                            </div>
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+        `;
+        return;
+    }
+
+    const products = byWarehouse[selectedWarehouseId] || [];
+    const byCategory = products.reduce((grouped, item) => {
+        const category = item.category || "Chưa phân loại";
+        if (!grouped[category]) grouped[category] = [];
+        grouped[category].push(item);
+        return grouped;
+    }, {});
+
+    container.innerHTML = `
+        <div class="warehouse-detail-header">
+            <button class="secondary-action-btn" type="button" data-warehouse-back>← Danh sách kho</button>
+            <h3>Kho ${escapeAttribute(selectedWarehouseId)}</h3>
+            <span>${products.length} sản phẩm</span>
+        </div>
+        ${Object.keys(byCategory).sort((a, b) => a.localeCompare(b, "vi")).map(category => `
+            <div class="warehouse-category">
+                <h4>${escapeAttribute(category)}</h4>
+                <div class="table-wrap"><table>
+                    <thead>
+                        <tr>
+                            <th>Sản phẩm</th><th>Tồn hiện tại</th><th>Dự báo ngày tiếp theo</th><th>Reorder Point</th><th>Cần nhập</th><th>Mức tồn kho</th><th>Hoạt động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${byCategory[category].map(item => `
+                            <tr>
+                                <td>${escapeAttribute(item.productId)}</td>
+                                <td><strong>${item.stock ?? 0}</strong></td>
+                                <td>${toNumber(item.future_demand, 0)}</td>
+                                <td>${item.reorder_point ?? "-"}</td>
+                                <td>${item.reorder_quantity ?? 0}</td>
+                                <td><span class="level-badge level-${item.inventory_level || "NORMAL"}">${item.inventory_level || "CHƯA ĐÁNH GIÁ"}</span></td>
+                                <td>
+                                    <button
+                                        class="table-edit-btn product-edit-icon"
+                                        type="button"
+                                        data-action="edit-product"
+                                        data-warehouse="${escapeAttribute(item.warehouseId)}"
+                                        data-product="${escapeAttribute(item.productId)}"
+                                        title="Sửa tên sản phẩm"
+                                        aria-label="Sửa tên sản phẩm"
+                                    >✎</button>
+                                </td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table></div>
+            </div>
+        `).join("")}
+    `;
 }
 
 document.getElementById("warehouseSortBtn")?.addEventListener("click", () => {
@@ -762,12 +845,205 @@ document.getElementById("warehouseSortBtn")?.addEventListener("click", () => {
     renderWarehouseInventory(realtimeWarehouses);
 });
 
+document.getElementById("warehouseDrilldown")?.addEventListener("click", event => {
+    const editWarehouseButton = event.target.closest('[data-action="edit-warehouse"]');
+    if (editWarehouseButton) {
+        editWarehouseName(editWarehouseButton);
+        return;
+    }
+
+    const deleteWarehouseButton = event.target.closest('[data-action="delete-warehouse"]');
+    if (deleteWarehouseButton) {
+        removeWarehouse(deleteWarehouseButton);
+        return;
+    }
+
+    const openButton = event.target.closest("[data-warehouse-open]");
+    if (openButton) {
+        selectedWarehouseId = openButton.dataset.warehouseOpen;
+        renderWarehouseInventory(realtimeWarehouses);
+        return;
+    }
+    if (event.target.closest("[data-warehouse-back]")) {
+        selectedWarehouseId = null;
+        renderWarehouseInventory(realtimeWarehouses);
+    }
+});
+
+async function editWarehouseName(button) {
+    const oldWarehouseId = button.dataset.warehouse || "";
+    openWarehouseActionModal({
+        mode: "rename-warehouse",
+        warehouseId: oldWarehouseId
+    });
+}
+
+async function removeWarehouse(button) {
+    const warehouseId = button.dataset.warehouse || "";
+    const productCount = Number(button.dataset.productCount || 0);
+    openWarehouseActionModal({
+        mode: "delete-warehouse",
+        warehouseId,
+        productCount
+    });
+}
+
+function openWarehouseActionModal(state) {
+    const modal = document.getElementById("warehouseActionModal");
+    const title = document.getElementById("warehouseModalTitle");
+    const description = document.getElementById("warehouseModalDescription");
+    const inputGroup = document.getElementById("warehouseModalInputGroup");
+    const inputLabel = document.getElementById("warehouseModalInputLabel");
+    const input = document.getElementById("warehouseModalInput");
+    const confirmButton = document.getElementById("warehouseModalConfirm");
+    const message = document.getElementById("warehouseModalMessage");
+    if (!modal) return;
+
+    warehouseActionState = state;
+    message.textContent = "";
+    message.className = "form-message";
+    confirmButton.disabled = false;
+    confirmButton.classList.remove("danger");
+
+    if (state.mode === "rename-warehouse") {
+        title.textContent = "Sửa tên kho";
+        description.textContent = `Đổi tên kho ${state.warehouseId}. Tất cả sản phẩm trong kho sẽ được chuyển sang tên mới.`;
+        inputLabel.textContent = "Tên kho mới";
+        input.value = state.warehouseId;
+        inputGroup.classList.remove("feature-hidden");
+        confirmButton.textContent = "Lưu tên kho";
+    } else if (state.mode === "rename-product") {
+        title.textContent = "Sửa tên sản phẩm";
+        description.textContent = `Kho ${state.warehouseId} · Sản phẩm hiện tại: ${state.productId}`;
+        inputLabel.textContent = "Tên sản phẩm mới";
+        input.value = state.productId;
+        inputGroup.classList.remove("feature-hidden");
+        confirmButton.textContent = "Lưu tên sản phẩm";
+    } else {
+        title.textContent = "Xóa kho";
+        description.textContent = `Bạn sắp xóa kho ${state.warehouseId} và toàn bộ ${state.productCount} sản phẩm trong kho. Lịch sử đơn hàng vẫn được giữ lại.`;
+        inputGroup.classList.add("feature-hidden");
+        confirmButton.textContent = "Xóa kho";
+        confirmButton.classList.add("danger");
+    }
+
+    modal.classList.remove("view-hidden");
+    modal.setAttribute("aria-hidden", "false");
+    if (state.mode !== "delete-warehouse") {
+        input.focus();
+        input.select();
+    }
+}
+
+function closeWarehouseActionModal() {
+    const modal = document.getElementById("warehouseActionModal");
+    modal?.classList.add("view-hidden");
+    modal?.setAttribute("aria-hidden", "true");
+    warehouseActionState = null;
+}
+
+function showWarehouseActionNotice(text, isError = false) {
+    const notice = document.getElementById("warehouseActionNotice");
+    if (!notice) return;
+    notice.textContent = text;
+    notice.classList.toggle("error", isError);
+    notice.classList.remove("feature-hidden");
+    window.setTimeout(() => notice.classList.add("feature-hidden"), 4500);
+}
+
+document.getElementById("warehouseModalClose")?.addEventListener("click", closeWarehouseActionModal);
+document.getElementById("warehouseModalCancel")?.addEventListener("click", closeWarehouseActionModal);
+document.getElementById("warehouseActionModal")?.addEventListener("click", event => {
+    if (event.target.id === "warehouseActionModal") closeWarehouseActionModal();
+});
+document.getElementById("warehouseModalInput")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") document.getElementById("warehouseModalConfirm")?.click();
+    if (event.key === "Escape") closeWarehouseActionModal();
+});
+
+document.getElementById("warehouseModalConfirm")?.addEventListener("click", async () => {
+    const state = warehouseActionState;
+    if (!state) return;
+
+    const input = document.getElementById("warehouseModalInput");
+    const confirmButton = document.getElementById("warehouseModalConfirm");
+    const message = document.getElementById("warehouseModalMessage");
+    const newValue = input.value.trim();
+
+    if (state.mode !== "delete-warehouse" && !newValue) {
+        message.className = "form-message error";
+        message.textContent = "Tên mới không được để trống.";
+        input.focus();
+        return;
+    }
+
+    confirmButton.disabled = true;
+    message.className = "form-message";
+    message.textContent = "Đang cập nhật Firebase...";
+
+    try {
+        let response;
+        let successMessage;
+        if (state.mode === "rename-warehouse") {
+            response = await fetch("/api/warehouses/rename", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    old_warehouse_id: state.warehouseId,
+                    new_warehouse_id: newValue
+                })
+            });
+            successMessage = `Đã đổi tên kho ${state.warehouseId} thành ${newValue}.`;
+        } else if (state.mode === "rename-product") {
+            response = await fetch("/api/products/rename", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    old_warehouse_id: state.warehouseId,
+                    old_product_id: state.productId,
+                    new_warehouse_id: state.warehouseId,
+                    new_product_id: newValue
+                })
+            });
+            successMessage = `Đã đổi tên sản phẩm ${state.productId} thành ${newValue}.`;
+        } else {
+            response = await fetch("/api/warehouses/delete", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    warehouse_id: state.warehouseId,
+                    confirm: state.warehouseId
+                })
+            });
+            successMessage = `Đã xóa kho ${state.warehouseId}. Lịch sử đơn hàng được giữ lại.`;
+        }
+
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || "Không thể cập nhật dữ liệu kho.");
+        }
+        if (state.mode === "delete-warehouse" && selectedWarehouseId === state.warehouseId) {
+            selectedWarehouseId = null;
+        }
+        closeWarehouseActionModal();
+        showWarehouseActionNotice(successMessage);
+    } catch (error) {
+        message.className = "form-message error";
+        message.textContent = error.message;
+        confirmButton.disabled = false;
+    }
+});
+
 document.getElementById("restockWarehouse")?.addEventListener("change", () => {
     renderRestockProductOptions();
 });
 
 document.getElementById("formWarehouseId")?.addEventListener("change", () => {
     renderOrderProductOptions();
+});
+
+document.getElementById("formProductId")?.addEventListener("change", () => {
+    updateOrderInventoryFeature();
 });
 
 document.getElementById("orderTableBody")?.addEventListener("click", event => {
@@ -801,48 +1077,11 @@ document.addEventListener("click", async event => {
 
     const oldWarehouseId = editButton.dataset.warehouse || "";
     const oldProductId = editButton.dataset.product || "";
-    const newWarehouseId = prompt("Nhập mã kho mới:", oldWarehouseId);
-    if (newWarehouseId === null) return;
-    const newProductId = prompt("Nhập tên/mã sản phẩm mới:", oldProductId);
-    if (newProductId === null) return;
-
-    const warehouseValue = newWarehouseId.trim();
-    const productValue = newProductId.trim();
-    if (!warehouseValue || !productValue) {
-        alert("Mã kho và tên sản phẩm không được để trống.");
-        return;
-    }
-
-    editButton.disabled = true;
-    editButton.textContent = "Đang sửa...";
-    try {
-        const response = await fetch("/api/products/rename", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                old_warehouse_id: oldWarehouseId,
-                old_product_id: oldProductId,
-                new_warehouse_id: warehouseValue,
-                new_product_id: productValue
-            })
-        });
-        const result = await response.json();
-        if (!response.ok || !result.ok) {
-            throw new Error(result.error || "Sửa thông tin kho/sản phẩm thất bại.");
-        }
-        showToast({
-            alert: "UPDATED",
-            order_id: productValue,
-            warehouse_id: warehouseValue,
-            inventory: 0,
-            reorder_quantity: 0
-        });
-    } catch (error) {
-        alert(error.message);
-    } finally {
-        editButton.disabled = false;
-        editButton.textContent = "Sửa";
-    }
+    openWarehouseActionModal({
+        mode: "rename-product",
+        warehouseId: oldWarehouseId,
+        productId: oldProductId
+    });
 });
 
 function isWarningOrder(order) {
@@ -1051,11 +1290,9 @@ function renderDashboard(data) {
     let totalOrders = 0, normalStock = 0, lowStock = 0;
     let criticalStock = 0, outOfStock = 0, reorder = 0, totalInv = 0;
     const orderStatusCounts = {
-        Pending: 0,
-        Processing: 0,
-        Shipping: 0,
-        Delivered: 0,
-        Cancelled: 0
+        processing: 0,
+        accepted: 0,
+        rejected: 0
     };
 
     const toTimestamp = value => {
@@ -1066,7 +1303,9 @@ function renderDashboard(data) {
         return Number.isFinite(parsed) ? parsed : 0;
     };
 
-    const allOrders = Object.values(data);
+    const allOrders = Object.values(data).filter(order =>
+        normalizeOrderStatus(order?.status)
+    );
     const latestTimestamp = allOrders.reduce((latest, order) => {
         return Math.max(
             latest,
@@ -1129,8 +1368,8 @@ function renderDashboard(data) {
     allOrders.forEach(o => {
         totalOrders++;
         totalInv += Number(o.inventory || 0);
-        const orderStatus = String(o.status || "Pending");
-        if (orderStatusCounts[orderStatus] !== undefined) {
+        const orderStatus = normalizeOrderStatus(o.status);
+        if (orderStatus && orderStatusCounts[orderStatus] !== undefined) {
             orderStatusCounts[orderStatus]++;
         }
 
@@ -1183,8 +1422,8 @@ else if (
         ordersDiv.innerHTML += `
             <div class="card ${statusClass}">
                 <strong> ${o.order_id || 'N/A'}</strong><br>
-                <span style="color:${getStatusColor(o.status)}">${o.status || '-'}</span><br>
-                Kho: ${o.warehouse_id || '-'} | Order Quantity: ${o.order_quantity ?? 0} | Tồn: ${o.inventory ?? 0} | Demand: ${o.future_demand ?? 0}<br>
+                <span style="color:${getStatusColor(o.status)}">${getStatusLabel(o.status)}</span><br>
+                Kho: ${o.warehouse_id || '-'} | Số lượng bán: ${o.order_quantity ?? 0} | Tồn: ${o.inventory ?? 0} | Dự báo: ${o.future_demand ?? 0}<br>
                 Level: <strong>${o.inventory_level || '-'}</strong> - ${o.inventory_level_description || getInventoryLevelDescription(o.inventory_level)}<br>
                 ROP: ${o.reorder_point ?? '-'} | Cần nhập: ${o.reorder_quantity ?? 0}
             </div>`;
@@ -1192,7 +1431,7 @@ else if (
         tableBody.innerHTML += `
             <tr class="order-row" data-order-id="${escapeAttribute(o.order_id || "")}" tabindex="0">
                 <td>${o.order_id || '-'}</td>
-                <td>${o.status || '-'}</td>
+                <td>${getStatusLabel(o.status)}</td>
                 <td>${o.warehouse_id || '-'}</td>
                 <td>${o.order_quantity ?? 0}</td>
                 <td>${o.inventory_before ?? '-'}</td>
@@ -1214,11 +1453,9 @@ else if (
             </tr>`;
     });
     // Update Stats
-    setText("pendingOrders", orderStatusCounts.Pending);
-    setText("processingOrders", orderStatusCounts.Processing);
-    setText("shippingOrders", orderStatusCounts.Shipping);
-    setText("deliveredOrders", orderStatusCounts.Delivered);
-    setText("cancelledOrders", orderStatusCounts.Cancelled);
+    setText("processingOrders", orderStatusCounts.processing);
+    setText("acceptedOrders", orderStatusCounts.accepted);
+    setText("rejectedOrders", orderStatusCounts.rejected);
     setText("tabAllCount", totalOrders);
     setText("tabNormalCount", normalStock);
     setText("tabLowCount", lowStock);
@@ -1239,8 +1476,8 @@ else if (
 }
 
 function getStatusColor(status) {
-    const colors = { "Pending":"#f97316", "Processing":"#3b82f6", "Shipping":"#eab308", "Delivered":"#22c55e", "Cancelled":"#ef4444" };
-    return colors[status] || "#94a3b8";
+    const key = normalizeOrderStatus(status);
+    return key ? ORDER_STATUS[key].color : "#94a3b8";
 }
 
 function getInventoryLevelDescription(level) {
@@ -1288,7 +1525,7 @@ function openOrderDetail(orderId) {
     if (!orderId) return;
     selectedOrderDetailId = orderId;
     showMenuView(orderDetailsNav, orderDetailsView);
-    setBreadcrumb(["Trang chủ", "Quản lý sản phẩm", "Chi tiết đơn hàng"]);
+    setBreadcrumb(["Trang chủ", "Quản lý kho hàng", "Nhập thêm hàng"]);
     renderOrderDetail(orderId);
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1296,7 +1533,7 @@ function openOrderDetail(orderId) {
 function showOrderDetailsList() {
     selectedOrderDetailId = null;
     showMenuView(orderDetailsNav, orderDetailsView);
-    setBreadcrumb(["Trang chủ", "Quản lý sản phẩm", "Chi tiết đơn hàng"]);
+    setBreadcrumb(["Trang chủ", "Quản lý kho hàng", "Nhập thêm hàng"]);
     renderOrderDetailsList();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1306,6 +1543,7 @@ function renderOrderDetailsList() {
     if (!container) return;
 
     const orders = Object.values(latestFirebaseOrders || {})
+        .filter(order => normalizeOrderStatus(order?.status))
         .sort((a, b) => orderTimestamp(b) - orderTimestamp(a));
 
     if (!orders.length) {
@@ -1328,10 +1566,10 @@ function renderOrderDetailsList() {
                             <span>${escapeAttribute(order.warehouse_id || "-")} / ${escapeAttribute(order.product_id || "-")}</span>
                         </div>
                         <div class="order-list-meta">
-                            <span class="status-pill" style="color:${getStatusColor(order.status)}">${escapeAttribute(order.status || "-")}</span>
+                            <span class="status-pill" style="color:${getStatusColor(order.status)}">${escapeAttribute(getStatusLabel(order.status))}</span>
                             <span class="level-badge level-${escapeAttribute(level)}">${escapeAttribute(level)}</span>
                             <span>T\u1ed3n sau: ${escapeAttribute(detailValue(order.inventory))}</span>
-                            <span>D\u1ef1 b\u00e1o: ${escapeAttribute(detailValue(order.future_demand))}</span>
+                            <span>D\u1ef1 b\u00e1o ng\u00e0y ti\u1ebfp theo: ${escapeAttribute(detailValue(order.future_demand))}</span>
                             <span>C\u1ea7n nh\u1eadp: ${escapeAttribute(detailValue(order.reorder_quantity, 0))}</span>
                         </div>
                     </button>
@@ -1366,9 +1604,6 @@ function renderOrderDetail(orderId) {
     }
 
     const demand7 = detailValue(order.future_demand);
-    const demand30 = order.future_demand_30 != null
-        ? order.future_demand_30
-        : forecast30From7(order.future_demand || 0);
     const logs = Array.isArray(order.processing_logs)
         ? order.processing_logs
         : [];
@@ -1376,17 +1611,23 @@ function renderOrderDetail(orderId) {
 
     const detailRows = [
         ["M\u00e3 \u0111\u01a1n h\u00e0ng", order.order_id],
-        ["Tr\u1ea1ng th\u00e1i", order.status],
+        ["Tr\u1ea1ng th\u00e1i", getStatusLabel(order.status)],
         ["Kho", order.warehouse_id],
         ["S\u1ea3n ph\u1ea9m", order.product_id],
-        ["Order Quantity", order.order_quantity],
+        ["Danh mục", order.category],
+        ["Khu vực", order.region],
+        ["Số lượng bán", order.order_quantity],
+        ["Số lượng nhập thêm", order.incoming_stock ?? 0],
+        ["Giá sản phẩm", order.price],
+        ["Giảm giá", order.discount],
+        ["Thời tiết", order.weather_condition],
+        ["Khuyến mãi", Number(order.promotion || 0) ? "Có" : "Không"],
+        ["Giá đối thủ", order.competitor_pricing],
+        ["Mùa vụ", order.seasonality],
+        ["Dịch bệnh / gián đoạn", Number(order.epidemic || 0) ? "Có" : "Không"],
         ["T\u1ed3n tr\u01b0\u1edbc", order.inventory_before],
         ["T\u1ed3n sau", order.inventory],
-        ["D\u1ef1 b\u00e1o 7 ng\u00e0y", demand7],
-        ["D\u1ef1 b\u00e1o 30 ng\u00e0y", demand30],
-        ["S\u1ea3n ph\u1ea9m / Ng\u00e0y", order.daily_sales],
-        ["S\u1ed1 b\u00e1n 7 ng\u00e0y qua", sales7Days(order)],
-        ["S\u1ed1 b\u00e1n 30 ng\u00e0y qua", sales30Days(order)],
+        ["D\u1ef1 b\u00e1o ng\u00e0y ti\u1ebfp theo", demand7],
         ["Reorder Point", order.reorder_point],
         ["C\u1ea7n nh\u1eadp", order.reorder_quantity],
         ["M\u1ee9c t\u1ed3n kho", `${level} - ${order.inventory_level_description || getInventoryLevelDescription(level)}`],
@@ -1410,7 +1651,7 @@ function renderOrderDetail(orderId) {
                         <p>${escapeAttribute(order.warehouse_id || "-")} / ${escapeAttribute(order.product_id || "-")}</p>
                     </div>
                     <div class="detail-status-group">
-                        <span class="status-pill" style="color:${getStatusColor(order.status)}">${escapeAttribute(order.status || "-")}</span>
+                        <span class="status-pill" style="color:${getStatusColor(order.status)}">${escapeAttribute(getStatusLabel(order.status))}</span>
                         <span class="level-badge level-${escapeAttribute(level)}">${escapeAttribute(level)}</span>
                     </div>
                 </div>
@@ -1437,28 +1678,20 @@ function renderOrderDetail(orderId) {
 }
 
 function showOrderResult(order) {
-    document.getElementById("resultBefore").textContent =
-        order.inventory_before ?? "-";
-    document.getElementById("resultQuantity").textContent =
-        order.order_quantity ?? "-";
+    const setResultText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value ?? "-";
+    };
+
+    setResultText("resultBefore", order.inventory_before ?? "-");
+    setResultText("resultQuantity", order.order_quantity ?? "-");
     const demand7 = toNumber(order.future_demand, 0);
-    const demand30 = order.future_demand_30 != null
-        ? toNumber(order.future_demand_30, 0)
-        : forecast30From7(demand7);
-    document.getElementById("resultDemand7").textContent =
-        demand7;
-    document.getElementById("resultDemand30").textContent =
-        demand30;
-    document.getElementById("resultAfter").textContent =
-        order.inventory ?? "-";
-    document.getElementById("resultRop").textContent =
-        order.reorder_point ?? "-";
-    document.getElementById("resultReorder").textContent =
-        order.reorder_quantity ?? "-";
-    document.getElementById("resultLevel").textContent =
-        order.inventory_level ?? "-";
-    document.getElementById("resultAlert").textContent =
-        order.alert ?? "-";
+    setResultText("resultDemand7", demand7);
+    setResultText("resultAfter", order.inventory ?? "-");
+    setResultText("resultRop", order.reorder_point ?? "-");
+    setResultText("resultReorder", order.reorder_quantity ?? "-");
+    setResultText("resultLevel", order.inventory_level ?? "-");
+    setResultText("resultAlert", order.alert ?? "-");
 }
 
 function showFormLogs(logs) {
@@ -1488,10 +1721,20 @@ document.getElementById("newOrderForm").addEventListener("submit", async event =
         order_id: document.getElementById("formOrderId").value.trim(),
         product_id: document.getElementById("formProductId").value.trim(),
         warehouse_id: document.getElementById("formWarehouseId").value.trim(),
+        category: document.getElementById("formCategory").value,
+        region: document.getElementById("formRegion").value,
+        inventory_quantity: document.getElementById("formInventoryQuantity").value,
         order_quantity: document.getElementById("formOrderQuantity").value,
-        lead_time: document.getElementById("formLeadTime").value,
+        units_sold: document.getElementById("formUnitsSold").value,
         order_date: document.getElementById("formOrderDate").value,
-        daily_sales: document.getElementById("formDailySales").value
+        incoming_stock: document.getElementById("formIncomingStock").value,
+        price: document.getElementById("formPrice").value,
+        discount: document.getElementById("formDiscount").value,
+        weather_condition: document.getElementById("formWeatherCondition").value,
+        promotion: document.getElementById("formPromotion").value,
+        competitor_pricing: document.getElementById("formCompetitorPricing").value,
+        seasonality: document.getElementById("formSeasonality").value,
+        epidemic: document.getElementById("formEpidemic").value
     };
 
     try {
@@ -1504,7 +1747,7 @@ document.getElementById("newOrderForm").addEventListener("submit", async event =
         if (!response.ok || !result.ok) {
             const details = result.errors
                 ? Object.values(result.errors).join(" ")
-                : result.error || "Khng th x l n hng.";
+                : result.error || "Không thể xử lý đơn hàng.";
             throw new Error(details);
         }
         showFormLogs(result.logs);
@@ -1522,7 +1765,7 @@ document.getElementById("newOrderForm").addEventListener("submit", async event =
     }
 });
 
-document.getElementById("addProductForm").addEventListener("submit", async event => {
+document.getElementById("addProductForm")?.addEventListener("submit", async event => {
     event.preventDefault();
     const button = document.getElementById("addProductBtn");
     const message = document.getElementById("addProductMessage");
@@ -1561,7 +1804,126 @@ document.getElementById("addProductForm").addEventListener("submit", async event
     }
 });
 
-document.getElementById("restockForm").addEventListener("submit", async event => {
+const bulkInput = document.getElementById("bulkListInput");
+const bulkButton = document.getElementById("bulkListBtn");
+
+function parseBulkRows() {
+    return String(bulkInput?.value || "")
+        .split(/\r?\n/)
+        .map((source, index) => {
+            const parts = source.split(",").map(part => part.trim());
+            const [warehouse_id, product_id, stockText] = parts;
+            const stock = Number(stockText);
+            let error = "";
+            if (!source.trim()) error = "Dòng trống";
+            else if (parts.length !== 3) error = "Cần đúng 3 cột";
+            else if (!warehouse_id) error = "Thiếu mã kho";
+            else if (!product_id) error = "Thiếu mã sản phẩm";
+            else if (stockText === "" || !Number.isInteger(stock) || stock < 0) error = "Tồn kho phải là số nguyên ≥ 0";
+            return { line: index + 1, source, warehouse_id, product_id, stock, error };
+        })
+        .filter(row => row.source.trim());
+}
+
+function renderBulkPreview() {
+    const rows = parseBulkRows();
+    const validRows = rows.filter(row => !row.error);
+    const body = document.getElementById("bulkPreviewBody");
+    document.getElementById("bulkTotalCount").textContent = rows.length;
+    document.getElementById("bulkValidCount").textContent = validRows.length;
+    document.getElementById("bulkInvalidCount").textContent = rows.length - validRows.length;
+    bulkButton.disabled = validRows.length === 0;
+    bulkButton.textContent = `Thêm ${validRows.length} sản phẩm`;
+    body.innerHTML = "";
+    if (!rows.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 5;
+        cell.className = "bulk-empty";
+        cell.textContent = "Chưa có dữ liệu";
+        row.appendChild(cell);
+        body.appendChild(row);
+        return;
+    }
+    rows.slice(0, 100).forEach(item => {
+        const row = document.createElement("tr");
+        [item.line, item.warehouse_id || "—", item.product_id || "—", Number.isFinite(item.stock) ? item.stock : "—"].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+        });
+        const statusCell = document.createElement("td");
+        const status = document.createElement("span");
+        status.className = `bulk-status ${item.error ? "invalid" : "valid"}`;
+        status.textContent = item.error || "Hợp lệ";
+        statusCell.appendChild(status);
+        row.appendChild(statusCell);
+        body.appendChild(row);
+    });
+}
+
+bulkInput?.addEventListener("input", renderBulkPreview);
+document.getElementById("bulkSampleBtn")?.addEventListener("click", () => {
+    bulkInput.value = "WH01, SKU001, 100\nWH01, SKU002, 50\nWH02, SKU003, 200";
+    renderBulkPreview();
+    bulkInput.focus();
+});
+document.getElementById("bulkClearBtn")?.addEventListener("click", () => {
+    bulkInput.value = "";
+    document.getElementById("bulkListMessage").textContent = "Chỉ các dòng hợp lệ mới được gửi lên Firebase.";
+    renderBulkPreview();
+    bulkInput.focus();
+});
+renderBulkPreview();
+
+bulkButton?.addEventListener("click", async () => {
+    const input = bulkInput;
+    const message = document.getElementById("bulkListMessage");
+    const button = document.getElementById("bulkListBtn");
+    const parsedRows = parseBulkRows();
+    const rows = parsedRows.filter(row => !row.error);
+
+    if (!rows.length) {
+        message.className = "form-message error";
+        message.textContent = "Vui lòng nhập ít nhất một dòng: kho, sản phẩm, tồn kho.";
+        return;
+    }
+
+    button.disabled = true;
+    message.className = "form-message";
+    message.textContent = "Đang thêm danh sách vào Firebase...";
+
+    let success = 0;
+    const errors = [];
+    for (const { warehouse_id, product_id, stock } of rows) {
+        try {
+            const response = await fetch("/api/products", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ warehouse_id, product_id, stock })
+            });
+            const result = await response.json();
+            if (!response.ok || !result.ok) {
+                throw new Error(result.error || "Không thể thêm sản phẩm.");
+            }
+            success++;
+        } catch (error) {
+            errors.push(`${warehouse_id}/${product_id}: ${error.message}`);
+        }
+    }
+
+    button.disabled = false;
+    message.className = errors.length ? "form-message error" : "form-message success";
+    message.textContent = errors.length
+        ? `Đã thêm ${success} dòng, lỗi ${errors.length}: ${errors.slice(0, 2).join(" | ")}`
+        : `Đã thêm ${success} sản phẩm; Dashboard nhận qua onValue.`;
+    if (!errors.length) {
+        input.value = "";
+        renderBulkPreview();
+    }
+});
+
+document.getElementById("restockForm")?.addEventListener("submit", async event => {
     event.preventDefault();
     const button = document.getElementById("restockBtn");
     const message = document.getElementById("restockMessage");
@@ -1623,15 +1985,31 @@ fetch("/api/model-info")
         document.getElementById("metricR2").textContent =
             Number(info.r2).toFixed(4);
         document.getElementById("modelLoadStatus").textContent = info.loaded
-            ? `${info.name} + ${info.encoding}  t?i thnh cng`
-            : "Model cha t?i c - ang dng fallback";
+            ? `${info.name} + ${info.encoding} đã tải thành công`
+            : "Model chưa tải được - đang dùng fallback";
         document.getElementById("modelLoadStatus").className = info.loaded
             ? "firebase-connected"
             : "firebase-error";
     })
     .catch(() => {
         document.getElementById("modelLoadStatus").textContent =
-            "Khng c c trng thi model";
+            "Không có trạng thái model";
+    });
+
+fetch("/api/feature-options")
+    .then(response => response.json())
+    .then(options => {
+        featureOptions = options || featureOptions;
+        renderFeatureOptions();
+    })
+    .catch(() => {
+        featureOptions = {
+            category: ["Clothing", "Electronics", "Furniture", "Groceries", "Toys"],
+            region: ["East", "North", "South", "West"],
+            weather_condition: ["Cloudy", "Rainy", "Snowy", "Sunny"],
+            seasonality: ["Autumn", "Spring", "Summer", "Winter"]
+        };
+        renderFeatureOptions();
     });
 
 function resetInventoryFilters() {

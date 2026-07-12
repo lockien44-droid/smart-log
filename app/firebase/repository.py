@@ -1,11 +1,14 @@
 import time
-from datetime import datetime
+import math
+from datetime import date, datetime, timedelta
 
 from app.firebase.config import database as db
 
 MAX_HISTORY = 20
 MAX_GPS_HISTORY = 50
 MAX_EVENTS = 100
+SALES_HISTORY_RETENTION_DAYS = 60
+DEMAND_HISTORY_RETENTION_DAYS = 120
 
 # ==============================
 # SAFE CONVERT
@@ -24,6 +27,89 @@ def safe_float(v, default=0.0):
         return default
 
 
+def _normalize_iso_date(value, field_name="date"):
+    if isinstance(value, datetime):
+        normalized = value.date()
+    elif isinstance(value, date):
+        normalized = value
+    else:
+        text = str(value or "").strip()
+        try:
+            normalized = date.fromisoformat(text)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f"{field_name} must use ISO format YYYY-MM-DD"
+            ) from error
+        if normalized.isoformat() != text:
+            raise ValueError(
+                f"{field_name} must use ISO format YYYY-MM-DD"
+            )
+
+    return normalized
+
+
+def _sales_value(value):
+    """Read current or legacy sales-history values without masking gaps as zero."""
+    if isinstance(value, dict):
+        for key in (
+            "units_sold",
+            "daily_sales",
+            "sales",
+            "quantity",
+            "value",
+        ):
+            if key in value:
+                normalized = _sales_value(value.get(key))
+                if normalized is not None:
+                    return normalized
+
+        if len(value) == 1:
+            return _sales_value(next(iter(value.values())))
+        return None
+
+    if value is None or isinstance(value, bool):
+        return None
+
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(normalized) or normalized < 0:
+        return None
+    if normalized.is_integer():
+        return int(normalized)
+    return normalized
+
+
+def _required_sales_value(value, field_name="units_sold"):
+    normalized = _sales_value(value)
+    if normalized is None:
+        raise ValueError(f"{field_name} must be a non-negative number")
+    return normalized
+
+
+def _normalize_missing_history(value):
+    if isinstance(value, (str, date, datetime)):
+        values = [value]
+    else:
+        try:
+            values = list(value)
+        except TypeError as error:
+            raise ValueError("missing_history must be a list") from error
+    return [str(item) for item in values]
+
+
+def _normalize_unknown_categories(value):
+    if isinstance(value, dict):
+        return {
+            str(key): str(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value]
+    return [str(value)]
+
 # ==============================
 # PRODUCT INVENTORY
 # ==============================
@@ -31,6 +117,10 @@ def _product_ref(warehouse_id, product_id):
     return db.reference(
         f"warehouses/{str(warehouse_id)}/products/{str(product_id)}"
     )
+
+
+def _warehouse_ref(warehouse_id):
+    return db.reference(f"warehouses/{str(warehouse_id)}")
 
 
 def get_product_stock(warehouse_id, product_id):
@@ -52,6 +142,186 @@ def get_product_data(warehouse_id, product_id):
     ).get()
 
     return value if isinstance(value, dict) else None
+
+
+def record_product_daily_sales(
+    warehouse_id,
+    product_id,
+    observation_date,
+    units_sold,
+):
+    """Store one idempotent daily-sales total for a warehouse/product."""
+    day = _normalize_iso_date(observation_date, "observation_date")
+    sales = _required_sales_value(units_sold)
+    history_ref = _product_ref(
+        warehouse_id,
+        product_id,
+    ).child("sales_history")
+    history_ref.child(day.isoformat()).set({
+        "units_sold": sales,
+        "updated_at": time.time(),
+        "updated_at_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+    history = history_ref.get() or {}
+    if isinstance(history, dict):
+        dated_keys = []
+        for key in history:
+            try:
+                dated_keys.append((_normalize_iso_date(key), str(key)))
+            except ValueError:
+                continue
+        dated_keys.sort()
+        cutoff = day - timedelta(days=SALES_HISTORY_RETENTION_DAYS - 1)
+        keys_to_delete = [key for item_date, key in dated_keys if item_date < cutoff]
+        remaining = [item for item in dated_keys if item[1] not in keys_to_delete]
+        if len(remaining) > SALES_HISTORY_RETENTION_DAYS:
+            keys_to_delete.extend(
+                key
+                for _, key in remaining[:-SALES_HISTORY_RETENTION_DAYS]
+            )
+        for key in dict.fromkeys(keys_to_delete):
+            history_ref.child(key).delete()
+
+    return {
+        "observation_date": day.isoformat(),
+        "units_sold": sales,
+    }
+
+
+def get_product_sales_features(
+    warehouse_id,
+    product_id,
+    observation_date,
+    current_units_sold,
+):
+    """Build exact calendar sales features for forecast day t+1."""
+    day = _normalize_iso_date(observation_date, "observation_date")
+    current_sales = _required_sales_value(
+        current_units_sold,
+        "current_units_sold",
+    )
+    product = get_product_data(warehouse_id, product_id) or {}
+    raw_history = product.get("sales_history", {})
+    history = {}
+    if isinstance(raw_history, dict):
+        for key, value in raw_history.items():
+            try:
+                history[_normalize_iso_date(key)] = _sales_value(value)
+            except ValueError:
+                continue
+
+    window_dates = [day - timedelta(days=offset) for offset in range(6, 0, -1)]
+    previous_values = [history.get(item) for item in window_dates]
+    missing_dates = [
+        item.isoformat()
+        for item, value in zip(window_dates, previous_values)
+        if value is None
+    ]
+    window_values = previous_values + [current_sales]
+    history_complete = not missing_dates
+
+    return {
+        "units_sold_lag_1": current_sales,
+        "units_sold_lag_7": previous_values[0] if previous_values[0] is not None else None,
+        "units_sold_rolling_mean_7": (
+            sum(window_values) / len(window_values)
+            if history_complete
+            else None
+        ),
+        "history_complete": history_complete,
+        "missing_history": missing_dates,
+    }
+
+
+def record_product_daily_demand(
+    warehouse_id,
+    product_id,
+    observation_date,
+    actual_demand,
+):
+    """Store actual daily demand separately from the model forecast."""
+    day = _normalize_iso_date(observation_date, "observation_date")
+    demand = _required_sales_value(actual_demand, "actual_demand")
+    history_ref = _product_ref(
+        warehouse_id, product_id
+    ).child("demand_history")
+    history_ref.child(day.isoformat()).set({
+        "actual_demand": demand,
+        "updated_at": time.time(),
+        "updated_at_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+    cutoff = day - timedelta(days=DEMAND_HISTORY_RETENTION_DAYS - 1)
+    history = history_ref.get() or {}
+    if isinstance(history, dict):
+        for key in list(history):
+            try:
+                if _normalize_iso_date(key) < cutoff:
+                    history_ref.child(str(key)).delete()
+            except ValueError:
+                continue
+    return {"observation_date": day.isoformat(), "actual_demand": demand}
+
+
+def get_product_demand_features(
+    warehouse_id,
+    product_id,
+    observation_date,
+    current_actual_demand=None,
+):
+    """Build leak-free demand lags/rolling statistics through day t."""
+    day = _normalize_iso_date(observation_date, "observation_date")
+    product = get_product_data(warehouse_id, product_id) or {}
+    raw_history = product.get("demand_history", {})
+    history = {}
+    if isinstance(raw_history, dict):
+        for key, value in raw_history.items():
+            try:
+                history[_normalize_iso_date(key)] = _sales_value(
+                    value.get("actual_demand") if isinstance(value, dict) else value
+                )
+            except ValueError:
+                continue
+    current = _sales_value(current_actual_demand)
+    if current is not None:
+        history[day] = current
+
+    def exact_lag(days):
+        return history.get(day - timedelta(days=days - 1))
+
+    def window(days):
+        dates = [day - timedelta(days=offset) for offset in range(days - 1, -1, -1)]
+        values = [history.get(item) for item in dates]
+        if any(value is None for value in values):
+            return None, None, [
+                item.isoformat() for item, value in zip(dates, values) if value is None
+            ]
+        mean = sum(values) / days
+        variance = sum((value - mean) ** 2 for value in values) / max(days - 1, 1)
+        return mean, math.sqrt(variance), []
+
+    mean_7, std_7, missing_7 = window(7)
+    mean_28, std_28, missing_28 = window(28)
+    features = {
+        "demand_lag_1": exact_lag(1),
+        "demand_lag_7": exact_lag(7),
+        "demand_lag_14": exact_lag(14),
+        "demand_lag_28": exact_lag(28),
+        "demand_rolling_mean_7": mean_7,
+        "demand_rolling_mean_28": mean_28,
+        "demand_rolling_std_7": std_7,
+        "demand_rolling_std_28": std_28,
+        "demand_trend_7_28": (
+            mean_7 - mean_28 if mean_7 is not None and mean_28 is not None else None
+        ),
+    }
+    missing = sorted(set(missing_7 + missing_28))
+    features.update({
+        "history_complete": not missing,
+        "missing_history": missing,
+    })
+    return features
 
 
 def set_product_stock(warehouse_id, product_id, quantity):
@@ -181,6 +451,91 @@ def rename_product_location(old_warehouse_id, old_product_id, new_warehouse_id, 
     }
 
 
+def rename_warehouse(old_warehouse_id, new_warehouse_id):
+    old_warehouse_id = str(old_warehouse_id).strip()
+    new_warehouse_id = str(new_warehouse_id).strip()
+
+    if not old_warehouse_id or not new_warehouse_id:
+        raise ValueError("Tên kho cũ và tên kho mới không được để trống.")
+
+    old_ref = _warehouse_ref(old_warehouse_id)
+    warehouse_data = old_ref.get()
+    if not isinstance(warehouse_data, dict):
+        raise ValueError(f"Không tìm thấy kho {old_warehouse_id}.")
+
+    if old_warehouse_id == new_warehouse_id:
+        return {
+            "old_warehouse_id": old_warehouse_id,
+            "warehouse_id": new_warehouse_id,
+            "updated_products": len(warehouse_data.get("products", {})),
+            "updated_orders": 0,
+        }
+
+    new_ref = _warehouse_ref(new_warehouse_id)
+    if new_ref.get() is not None:
+        raise ValueError(f"Kho {new_warehouse_id} đã tồn tại.")
+
+    timestamp = time.time()
+    timestamp_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    products = warehouse_data.get("products", {})
+    if isinstance(products, dict):
+        for product_id, product in products.items():
+            if not isinstance(product, dict):
+                continue
+            product.update({
+                "warehouse_id": new_warehouse_id,
+                "product_id": str(product_id),
+                "last_updated": timestamp,
+                "last_updated_text": timestamp_text,
+            })
+
+    new_ref.set(warehouse_data)
+    old_ref.delete()
+
+    orders_ref = db.reference("orders")
+    orders = orders_ref.get() or {}
+    updated_orders = 0
+    if isinstance(orders, dict):
+        for order_id, order in orders.items():
+            if not isinstance(order, dict):
+                continue
+            if str(order.get("warehouse_id", "")) == old_warehouse_id:
+                orders_ref.child(str(order_id)).update({
+                    "warehouse_id": new_warehouse_id,
+                    "last_updated": timestamp,
+                    "last_updated_text": timestamp_text,
+                })
+                updated_orders += 1
+
+    return {
+        "old_warehouse_id": old_warehouse_id,
+        "warehouse_id": new_warehouse_id,
+        "updated_products": len(products) if isinstance(products, dict) else 0,
+        "updated_orders": updated_orders,
+    }
+
+
+def delete_warehouse(warehouse_id):
+    warehouse_id = str(warehouse_id).strip()
+    if not warehouse_id:
+        raise ValueError("Tên kho không được để trống.")
+
+    warehouse_ref = _warehouse_ref(warehouse_id)
+    warehouse_data = warehouse_ref.get()
+    if not isinstance(warehouse_data, dict):
+        raise ValueError(f"Không tìm thấy kho {warehouse_id}.")
+
+    products = warehouse_data.get("products", {})
+    product_count = len(products) if isinstance(products, dict) else 0
+    warehouse_ref.delete()
+
+    return {
+        "warehouse_id": warehouse_id,
+        "deleted_products": product_count,
+        "orders_preserved": True,
+    }
+
+
 def update_product_inventory_analysis(
     warehouse_id,
     product_id,
@@ -189,10 +544,19 @@ def update_product_inventory_analysis(
     reorder_point,
     reorder_quantity,
     reorder_required,
-    future_demand_30=None,
     daily_sales=None,
-    sales_7_days=None,
-    sales_30_days=None
+    incoming_stock=None,
+    category=None,
+    region=None,
+    units_sold=None,
+    inventory_quantity=None,
+    price=None,
+    discount=None,
+    weather_condition=None,
+    promotion=None,
+    competitor_pricing=None,
+    seasonality=None,
+    epidemic=None
 ):
     data = {
         "future_demand": safe_int(future_demand),
@@ -204,14 +568,31 @@ def update_product_inventory_analysis(
         "last_updated_text": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
-    if future_demand_30 is not None:
-        data["future_demand_30"] = safe_int(future_demand_30)
     if daily_sales is not None:
         data["daily_sales"] = safe_int(daily_sales)
-    if sales_7_days is not None:
-        data["sales_7_days"] = safe_int(sales_7_days)
-    if sales_30_days is not None:
-        data["sales_30_days"] = safe_int(sales_30_days)
+    if incoming_stock is not None:
+        data["incoming_stock"] = safe_int(incoming_stock)
+    if units_sold is not None:
+        data["units_sold"] = safe_int(units_sold)
+    if inventory_quantity is not None:
+        data["inventory_quantity"] = safe_int(inventory_quantity)
+    for key, value in {
+        "category": category,
+        "region": region,
+        "weather_condition": weather_condition,
+        "seasonality": seasonality,
+    }.items():
+        if value is not None:
+            data[key] = str(value)
+    for key, value in {
+        "price": price,
+        "discount": discount,
+        "promotion": promotion,
+        "competitor_pricing": competitor_pricing,
+        "epidemic": epidemic,
+    }.items():
+        if value is not None:
+            data[key] = safe_float(value)
 
     _product_ref(warehouse_id, product_id).update(data)
 
@@ -261,11 +642,28 @@ def update_order_status(
     fallback_used=False,
     prediction_error=None,
     server_completed_at_ms=None,
-    future_demand_30=None,
     daily_sales=None,
-    sales_7_days=None,
-    sales_30_days=None,
-
+    incoming_stock=None,
+    category=None,
+    region=None,
+    units_sold=None,
+    inventory_quantity=None,
+    price=None,
+    discount=None,
+    weather_condition=None,
+    promotion=None,
+    competitor_pricing=None,
+    seasonality=None,
+    epidemic=None,
+    order_date=None,
+    forecast_date=None,
+    units_sold_lag_1=None,
+    units_sold_lag_7=None,
+    units_sold_rolling_mean_7=None,
+    cold_start=False,
+    fallback_reason=None,
+    missing_history=None,
+    unknown_categories=None,
     event_id=None
 ):
 
@@ -318,21 +716,31 @@ def update_order_status(
         if not isinstance(events, list):
             events = []
 
-        events.append({
+        event_data = {
             "time": readable_time,
             "order_id": str(order_id),
             "status": str(status),
             "inventory": inventory,
             "inventory_before": safe_int(inventory_before, inventory),
             "order_quantity": safe_int(order_quantity),
+            "incoming_stock": safe_int(incoming_stock),
+            "units_sold": safe_int(units_sold),
+            "inventory_quantity": safe_int(inventory_quantity),
             "processed": bool(processed),
             "future_demand": demand,
-            "future_demand_30": safe_int(future_demand_30),
             "daily_sales": safe_int(daily_sales),
-            "sales_7_days": safe_int(sales_7_days),
-            "sales_30_days": safe_int(sales_30_days),
             "event": f"Order changed to {status}"
-        })
+        }
+        if order_date is not None:
+            event_data["order_date"] = _normalize_iso_date(
+                order_date, "order_date"
+            ).isoformat()
+        if forecast_date is not None:
+            event_data["forecast_date"] = _normalize_iso_date(
+                forecast_date, "forecast_date"
+            ).isoformat()
+        event_data["cold_start"] = bool(cold_start)
+        events.append(event_data)
 
         events = events[-MAX_EVENTS:]
 
@@ -397,12 +805,12 @@ def update_order_status(
             "inventory": inventory,
             "inventory_before": safe_int(inventory_before, inventory),
             "order_quantity": safe_int(order_quantity),
+            "incoming_stock": safe_int(incoming_stock),
+            "units_sold": safe_int(units_sold),
+            "inventory_quantity": safe_int(inventory_quantity),
             "processed": bool(processed),
             "future_demand": demand,
-            "future_demand_30": safe_int(future_demand_30),
             "daily_sales": safe_int(daily_sales),
-            "sales_7_days": safe_int(sales_7_days),
-            "sales_30_days": safe_int(sales_30_days),
 
             "inventory_level": inventory_level,
             "inventory_level_description": str(inventory_level_description),
@@ -436,6 +844,33 @@ def update_order_status(
             data["prediction_error"] = str(prediction_error)
         if server_completed_at_ms is not None:
             data["server_completed_at_ms"] = safe_int(server_completed_at_ms)
+        if order_date is not None:
+            data["order_date"] = _normalize_iso_date(
+                order_date, "order_date"
+            ).isoformat()
+        if forecast_date is not None:
+            data["forecast_date"] = _normalize_iso_date(
+                forecast_date, "forecast_date"
+            ).isoformat()
+        for key, value in {
+            "units_sold_lag_1": units_sold_lag_1,
+            "units_sold_lag_7": units_sold_lag_7,
+            "units_sold_rolling_mean_7": units_sold_rolling_mean_7,
+        }.items():
+            normalized = _sales_value(value)
+            if normalized is not None:
+                data[key] = normalized
+        data["cold_start"] = bool(cold_start)
+        if fallback_reason:
+            data["fallback_reason"] = str(fallback_reason)
+        if missing_history is not None:
+            data["missing_history"] = _normalize_missing_history(
+                missing_history
+            )
+        if unknown_categories is not None:
+            data["unknown_categories"] = _normalize_unknown_categories(
+                unknown_categories
+            )
 
         # =========================
         # OPTIONAL FIELDS SAFE
@@ -445,6 +880,27 @@ def update_order_status(
 
         if product_id:
             data["product_id"] = str(product_id)
+
+        optional_text_fields = {
+            "category": category,
+            "region": region,
+            "weather_condition": weather_condition,
+            "seasonality": seasonality,
+        }
+        for key, value in optional_text_fields.items():
+            if value is not None:
+                data[key] = str(value)
+
+        optional_number_fields = {
+            "price": price,
+            "discount": discount,
+            "promotion": promotion,
+            "competitor_pricing": competitor_pricing,
+            "epidemic": epidemic,
+        }
+        for key, value in optional_number_fields.items():
+            if value is not None:
+                data[key] = safe_float(value)
 
         if latitude is not None:
             data["latitude"] = safe_float(latitude)
@@ -530,7 +986,7 @@ if __name__ == "__main__":
 
     update_order_status(
         order_id="ORD00001",
-        status="Shipping",
+        status="accepted",
         inventory=250,
         demand=600,
         inventory_level="LOW",

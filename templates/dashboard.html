@@ -6,13 +6,13 @@
     <title>Smart Logistics Dashboard</title>
 
     
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=breadcrumb-menu-20260708">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}?v=warehouse-actions-v2-20260712">
 </head>
 <body>
 
 <div class="app-shell">
     <aside class="sidebar">
-        <div class="brand">SMART LOGISTICS<small>Inventory Management</small></div>
+        <div class="brand">SMarT<small>Inventory Management</small></div>
         <div id="dashboardNav" class="nav-item active nav-home">Trang chủ</div>
         <div class="menu-group">
             <div id="orderManagementNav" class="menu-parent">
@@ -21,14 +21,13 @@
         </div>
         <div class="menu-group">
             <div id="productMenuToggle" class="menu-parent">
-                <span class="menu-parent-left">Quản lý sản phẩm</span>
+                <span class="menu-parent-left">Quản lý kho hàng</span>
                 <span class="chevron">&rsaquo;</span>
             </div>
             <div id="productSubmenu" class="submenu">
-                <div id="allProductsNav" class="nav-item">Tất cả sản phẩm</div>
-                <div id="addProductNav" class="nav-item">Thêm / Nhập hàng</div>
-                <div id="orderDetailsNav" class="nav-item">Chi tiết đơn hàng</div>
-                <div id="inventoryNav" class="nav-item">Quản lý tồn kho</div>
+                <div id="bulkListNav" class="nav-item">Thêm kho mới</div>
+                <div id="inventoryNav" class="nav-item">Kho và sản phẩm</div>
+                <div id="orderDetailsNav" class="nav-item">Nhập thêm hàng</div>
             </div>
         </div>
         <div class="menu-group">
@@ -79,11 +78,9 @@
     <div id="overviewView">
     <div id="overviewSection" class="panel overview-panel">
         <div class="stats">
-            <div class="stat-card"><h2 id="pendingOrders">0</h2><p>Pending</p></div>
-            <div class="stat-card"><h2 id="processingOrders">0</h2><p>Processing</p></div>
-            <div class="stat-card"><h2 id="shippingOrders">0</h2><p>Shipping</p></div>
-            <div class="stat-card"><h2 id="deliveredOrders">0</h2><p>Delivered</p></div>
-            <div class="stat-card"><h2 id="cancelledOrders">0</h2><p>Cancelled</p></div>
+            <div class="stat-card"><h2 id="processingOrders">0</h2><p>Đang xử lý</p></div>
+            <div class="stat-card"><h2 id="acceptedOrders">0</h2><p>Đủ hàng – Đã nhận đơn</p></div>
+            <div class="stat-card"><h2 id="rejectedOrders">0</h2><p>Không đủ hàng – Từ chối đơn</p></div>
         </div>
     </div>
 
@@ -114,16 +111,26 @@
     <div id="orderFormSection" class="panel feature-hidden" style="margin-bottom:15px">
         <div class="section-heading">
             <h3>Tạo đơn hàng</h3>
-            <span>Random Forest Firebase Dashboard</span>
+            <span>Dự báo nhu cầu đúng ngày lịch t+1</span>
         </div>
         <form id="newOrderForm" class="order-form">
             <div class="form-group"><label>Mã đơn hàng</label><input id="formOrderId" placeholder="Để trống để tự tạo mã đơn"></div>
             <div class="form-group"><label>Sản phẩm</label><select id="formProductId" class="filter-control" required><option value="">Chọn kho trước</option></select></div>
             <div class="form-group"><label>Kho</label><select id="formWarehouseId" class="filter-control" required><option value="">Đang tải danh sách kho...</option></select></div>
-            <div class="form-group"><label>Số lượng đặt</label><input id="formOrderQuantity" type="number" min="1" required value="15"></div>
-            <div class="form-group"><label>Lead time (ngày)</label><input id="formLeadTime" type="number" min="1" step="1" required value="3"></div>
-            <div class="form-group"><label>Ngày đặt hàng</label><input id="formOrderDate" type="date" required></div>
-            <div class="form-group"><label>Sản phẩm / Ngày</label><input id="formDailySales" type="number" min="0" value="20"></div>
+            <div class="form-group"><label>Danh mục sản phẩm</label><select id="formCategory" class="filter-control" required><option value="">Đang tải...</option></select></div>
+            <div class="form-group"><label>Khu vực</label><select id="formRegion" class="filter-control" required><option value="">Đang tải...</option></select></div>
+            <div class="form-group"><label>Tồn kho hiện tại</label><input id="formInventoryQuantity" type="number" min="0" step="1" required placeholder="Tự lấy từ kho, có thể sửa"></div>
+            <div class="form-group"><label>Số lượng khách đặt</label><input id="formOrderQuantity" type="number" min="1" required value="15"></div>
+            <div class="form-group"><label>Tổng số lượng đã bán trong ngày t</label><input id="formUnitsSold" type="number" min="0" required value="15"></div>
+            <div class="form-group"><label>Ngày dữ liệu hiện tại (t)</label><input id="formOrderDate" type="date" required></div>
+            <div class="form-group"><label>Số lượng nhập thêm</label><input id="formIncomingStock" type="number" min="0" value="0"></div>
+            <div class="form-group"><label>Giá sản phẩm</label><input id="formPrice" type="number" min="0" step="0.01" required value="50"></div>
+            <div class="form-group"><label>Giảm giá</label><input id="formDiscount" type="number" min="0" step="0.01" required value="0"></div>
+            <div class="form-group"><label>Thời tiết</label><select id="formWeatherCondition" class="filter-control" required><option value="">Đang tải...</option></select></div>
+            <div class="form-group"><label>Khuyến mãi</label><select id="formPromotion" class="filter-control" required><option value="0">Không</option><option value="1">Có</option></select></div>
+            <div class="form-group"><label>Giá đối thủ</label><input id="formCompetitorPricing" type="number" min="0" step="0.01" required value="50"></div>
+            <div class="form-group"><label>Mùa vụ</label><select id="formSeasonality" class="filter-control" required><option value="">Đang tải...</option></select></div>
+            <div class="form-group"><label>Dịch bệnh / gián đoạn</label><select id="formEpidemic" class="filter-control" required><option value="0">Không</option><option value="1">Có</option></select></div>
             <div class="form-actions">
                 <button id="submitOrderBtn" type="submit">Tạo đơn hàng</button>
                 <span id="formMessage" class="form-message">Chọn kho, sản phẩm và số lượng để tạo đơn hàng.</span>
@@ -138,9 +145,9 @@
         </div>
         <div class="metric-grid">
             <div class="metric-item"><span>Train / Test</span><strong>80% / 20%</strong></div>
-            <div class="metric-item"><span>MAE</span><strong id="metricMae">22.19</strong></div>
-            <div class="metric-item"><span>RMSE</span><strong id="metricRmse">30.32</strong></div>
-            <div class="metric-item"><span>R²</span><strong id="metricR2">0.9787</strong></div>
+            <div class="metric-item"><span>MAE</span><strong id="metricMae">29.07</strong></div>
+            <div class="metric-item"><span>RMSE</span><strong id="metricRmse">37.44</strong></div>
+            <div class="metric-item"><span>R²</span><strong id="metricR2">0.2798</strong></div>
             <div class="metric-item"><span>Số cây</span><strong>100</strong></div>
         </div>
     </div>
@@ -161,53 +168,13 @@
         <div id="realtimeLog" class="realtime-log"><div class="log-line">Đang chờ ơn hàng mi...</div></div>
     </div>
 
-    <div id="addProductSection" class="panel feature-hidden" style="margin-bottom:15px">
-        <div class="section-heading">
-            <h3>Thêm sản phẩm vào kho</h3>
-            <span>Tạo SKU mới và đồng bộ Firebase realtime</span>
-        </div>
-        <form id="addProductForm" class="order-form">
-            <div class="form-group"><label>Mã kho</label><input id="newProductWarehouse" required placeholder="WH01"></div>
-            <div class="form-group"><label>Mã sản phẩm / SKU</label><input id="newProductId" required placeholder="SKU_NEW_001"></div>
-            <div class="form-group"><label>Tồn kho ban đầu</label><input id="newProductStock" type="number" min="0" required value="100"></div>
-            <div class="form-actions">
-                <button id="addProductBtn" type="submit">Thêm sản phẩm</button>
-                <span id="addProductMessage" class="form-message">Sản phẩm mới sẽ xuất hiện ngay trong bảng tồn kho.</span>
-            </div>
-        </form>
-    </div>
-
-    <div id="restockSection" class="panel feature-hidden" style="margin-bottom:15px">
-        <div class="section-heading">
-            <h3>Nhập thêm hàng vào kho</h3>
-            <span>Bổ sung hàng cho SKU đã tồn tại, cập nhật Firebase realtime</span>
-        </div>
-        <form id="restockForm" class="order-form">
-            <div class="form-group"><label>Mã kho</label><select id="restockWarehouse" class="filter-control" required><option value="">Đang tải danh sách kho...</option></select></div>
-            <div class="form-group"><label>Mã sản phẩm / SKU</label><select id="restockProductId" class="filter-control" required><option value="">Chọn kho trước</option></select></div>
-            <div class="form-group"><label>Số lượng nhập thêm</label><input id="restockQuantity" type="number" min="1" required value="100"></div>
-            <div class="form-actions">
-                <button id="restockBtn" type="submit">Nhập thêm hàng</button>
-                <span id="restockMessage" class="form-message">Dùng cho SKU sắp hết, nguy cấp hoặc đã hết hàng.</span>
-            </div>
-        </form>
-        <div class="prediction-result" style="margin-top:14px">
-            <div class="result-box"><span>Tồn trước</span><strong id="restockBefore">-</strong></div>
-            <div class="result-box"><span>Nhập thêm</span><strong id="restockAdded">-</strong></div>
-            <div class="result-box"><span>Tồn sau</span><strong id="restockAfter">-</strong></div>
-            <div class="result-box"><span>Mức tồn kho</span><strong id="restockLevel">-</strong></div>
-            <div class="result-box"><span>Reorder Point</span><strong id="restockRop">-</strong></div>
-            <div class="result-box"><span>Cần nhập</span><strong id="restockNeed">-</strong></div>
-        </div>
-    </div>
-
     <div id="alertsSection" class="panel feature-hidden" style="margin-bottom:15px">
         <div class="section-heading">
             <h3>Cảnh báo tồn kho realtime</h3>
             <span>LOW, CRITICAL và OUT_OF_STOCK</span>
         </div>
         <div class="table-wrap"><table>
-            <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Order Quantity</th><th>Tồn trước</th><th>Tồn sau</th><th>Dự báo</th><th>Mức tồn kho</th><th>Mức độ bổ sung</th><th>Reorder Point</th><th>Cần nhập</th>
+            <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Số lượng bán</th><th>Tồn trước</th><th>Tồn sau</th><th>Dự báo ngày tiếp theo</th><th>Mức tồn kho</th><th>Mức độ bổ sung</th><th>Reorder Point</th><th>Cần nhập</th>
             <tbody id="alertsPageBody"></tbody>
         </table></div>
     </div>
@@ -242,13 +209,13 @@
                 <small>— 0,00%</small>
             </div>
             <div class="sales-metric">
-                <div class="sales-label">Số bán 7 ngày qua <span class="info-dot">?</span></div>
-                <strong id="sales7DaysTotal">0</strong>
+                <div class="sales-label">Đơn đủ hàng <span class="info-dot">?</span></div>
+                <strong id="salesAcceptedTotal">0</strong>
                 <small>— 0,00%</small>
             </div>
             <div class="sales-metric">
-                <div class="sales-label">Số bán 30 ngày qua <span class="info-dot">?</span></div>
-                <strong id="sales30DaysTotal">0</strong>
+                <div class="sales-label">Đơn từ chối <span class="info-dot">?</span></div>
+                <strong id="salesRejectedTotal">0</strong>
                 <small>— 0,00%</small>
             </div>
         </div>
@@ -322,29 +289,63 @@
         <div class="table-wrap"><table>
             <thead>
                 <tr>
-                    <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Order Quantity</th><th>Tồn trước</th><th>Tồn sau</th><th>Dự báo</th><th>Mức tồn kho</th><th>Mức độ bổ sung</th><th>Reorder Point</th><th>Cần nhập</th>
+                    <th>Mã đơn</th><th>Trạng thái</th><th>Kho</th><th>Số lượng bán</th><th>Tồn trước</th><th>Tồn sau</th><th>Dự báo ngày tiếp theo</th><th>Mức tồn kho</th><th>Mức độ bổ sung</th><th>Reorder Point</th><th>Cần nhập</th>
                 </tr>
             </thead>
             <tbody id="orderTableBody"></tbody>
         </table></div>
     </div>
 
+    <div id="bulkListSection" class="panel feature-hidden">
+        <div class="section-heading bulk-heading">
+            <div>
+                <h3>Thêm sản phẩm hàng loạt</h3>
+                <span>Tạo nhiều sản phẩm và tồn kho ban đầu trong một lần.</span>
+            </div>
+            <div class="bulk-heading-actions">
+                <button id="bulkSampleBtn" class="secondary" type="button">Dữ liệu mẫu</button>
+                <button id="bulkClearBtn" class="secondary" type="button">Xóa nội dung</button>
+            </div>
+        </div>
+        <div class="bulk-layout">
+            <div class="bulk-editor-card">
+                <div class="bulk-format-note">
+                    <strong>Định dạng mỗi dòng</strong>
+                    <code>MÃ_KHO, MÃ_SẢN_PHẨM, TỒN_KHO</code>
+                </div>
+                <textarea id="bulkListInput" class="bulk-textarea" rows="12" spellcheck="false" placeholder="WH01, SKU001, 100&#10;WH01, SKU002, 50"></textarea>
+                <div class="bulk-summary" aria-live="polite">
+                    <span>Tổng: <strong id="bulkTotalCount">0</strong></span>
+                    <span class="bulk-valid">Hợp lệ: <strong id="bulkValidCount">0</strong></span>
+                    <span class="bulk-invalid">Có lỗi: <strong id="bulkInvalidCount">0</strong></span>
+                </div>
+            </div>
+            <div class="bulk-preview-card">
+                <div class="bulk-preview-header">
+                    <div><strong>Xem trước dữ liệu</strong><span>Kiểm tra trước khi ghi Firebase</span></div>
+                </div>
+                <div class="table-wrap bulk-preview-table"><table>
+                    <thead><tr><th>Dòng</th><th>Kho</th><th>Sản phẩm</th><th>Tồn kho</th><th>Trạng thái</th></tr></thead>
+                    <tbody id="bulkPreviewBody"><tr><td colspan="5" class="bulk-empty">Chưa có dữ liệu</td></tr></tbody>
+                </table></div>
+            </div>
+        </div>
+        <div class="bulk-footer">
+            <button id="bulkListBtn" class="primary" type="button" disabled>Thêm 0 sản phẩm</button>
+            <span id="bulkListMessage" class="form-message">Chỉ các dòng hợp lệ mới được gửi lên Firebase.</span>
+        </div>
+    </div>
+
     <div id="warehouseInventorySection" class="panel inventory-manage-card feature-hidden">
         <div class="section-heading">
             <div>
-                <h3>Quản lý tồn kho</h3>
-                <span>Theo dõi tồn hiện tại, số bán 7/30 ngày, dự báo nhu cầu và mức cần nhập</span>
+                <h3>Danh sách kho hàng</h3>
+                <span>Chọn kho để xem sản phẩm; dùng bút để đổi tên hoặc thùng rác để xóa kho</span>
             </div>
             <button id="warehouseSortBtn" class="secondary-action-btn" type="button">Sắp xếp kho hàng</button>
         </div>
-        <div class="table-wrap"><table>
-            <thead>
-                <tr>
-                    <th>Kho</th><th>Sản phẩm</th><th>Tồn hiện tại</th><th>Số bán 7 ngày qua</th><th>Số bán 30 ngày qua</th><th>Dự báo 7 ngày</th><th>Dự báo 30 ngày</th><th>Reorder Point</th><th>Cần nhập</th><th>Mức tồn kho</th><th>Hoạt động</th>
-                </tr>
-            </thead>
-            <tbody id="warehouseTableBody"></tbody>
-        </table></div>
+        <div id="warehouseActionNotice" class="warehouse-action-notice feature-hidden" role="status"></div>
+        <div id="warehouseDrilldown"></div>
     </div>
     </div>
 
@@ -358,8 +359,28 @@
 
 </main>
 </div>
+
+<div id="warehouseActionModal" class="warehouse-modal-backdrop view-hidden" aria-hidden="true">
+    <div class="warehouse-modal" role="dialog" aria-modal="true" aria-labelledby="warehouseModalTitle">
+        <div class="warehouse-modal-header">
+            <h3 id="warehouseModalTitle">Chỉnh sửa kho</h3>
+            <button id="warehouseModalClose" class="warehouse-modal-close" type="button" aria-label="Đóng">×</button>
+        </div>
+        <p id="warehouseModalDescription" class="warehouse-modal-description"></p>
+        <div id="warehouseModalInputGroup" class="form-group">
+            <label id="warehouseModalInputLabel" for="warehouseModalInput">Tên mới</label>
+            <input id="warehouseModalInput" type="text" autocomplete="off">
+        </div>
+        <div id="warehouseModalMessage" class="form-message"></div>
+        <div class="warehouse-modal-actions">
+            <button id="warehouseModalCancel" class="secondary-action-btn" type="button">Hủy</button>
+            <button id="warehouseModalConfirm" class="primary" type="button">Lưu thay đổi</button>
+        </div>
+    </div>
+</div>
+
 <div id="toastContainer"></div>
-<script src="{{ url_for('static', filename='js/dashboard.js') }}?v=realtime-last-10-20260708"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}?v=tplus1-v2-20260712"></script>
 <script type="module">
 import { initializeApp } from
     "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
