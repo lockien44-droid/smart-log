@@ -62,6 +62,10 @@ def train_same_day_model(model_path=MODEL_PATH):
         "rmse": float(np.sqrt(mean_squared_error(test_df[TARGET], predictions))),
         "r2": float(r2_score(test_df[TARGET], predictions)),
     }
+    known_categories = {
+        column: sorted(train_df[column].astype(str).unique().tolist())
+        for column in CATEGORICAL_FEATURES
+    }
     artifact = {
         "model": model,
         "schema_version": PROCESSED_SCHEMA_VERSION,
@@ -69,6 +73,7 @@ def train_same_day_model(model_path=MODEL_PATH):
         "categorical_features": CATEGORICAL_FEATURES,
         "numeric_features": NUMERIC_FEATURES,
         "history_features": [],
+        "known_categories": known_categories,
         "forecast_horizon_days": 0,
         "metrics": metrics,
         "model_name": "Random Forest Regressor (Same-day)",

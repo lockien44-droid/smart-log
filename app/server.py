@@ -204,6 +204,16 @@ def model_info():
 @app.route("/api/feature-options")
 def feature_options():
     if not RAW_DATA_FILE.exists():
+        known = get_model_info().get("known_categories", {})
+        if known:
+            return jsonify({
+                "ok": True,
+                "source": "model_artifact",
+                "category": known.get("category", []),
+                "region": known.get("region", []),
+                "weather_condition": known.get("weather_condition", []),
+                "seasonality": known.get("seasonality", []),
+            })
         return jsonify({
             "ok": False,
             "error": "Không tìm thấy data/raw/demand_forecasting.csv",

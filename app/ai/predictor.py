@@ -360,6 +360,7 @@ def get_model_info():
             "history_features",
             HISTORY_FEATURES,
         ),
+        "known_categories": MODEL_METADATA.get("known_categories", {}),
         "ignored_source_columns": MODEL_METADATA.get(
             "ignored_source_columns", []
         ),
